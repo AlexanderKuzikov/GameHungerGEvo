@@ -1,0 +1,2274 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#e9e0cb">
+  <meta name="description" content="Живой кодекс — клеточный автомат с наследственностью, сезонами, хищниками, паразитами и мутациями.">
+  <title>Живой кодекс · GameHungerGEvo</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --paper: #e9e0cb;
+      --paper-light: #f3ecd9;
+      --paper-deep: #d8cbb0;
+      --ink: #26332d;
+      --muted: #6f7468;
+      --moss: #60755b;
+      --moss-dark: #405442;
+      --ochre: #b18b4e;
+      --rust: #a45f43;
+      --blood: #813d43;
+      --water: #6f8b8a;
+      --line: rgba(38, 51, 45, 0.18);
+      --shadow: 0 16px 50px rgba(61, 48, 30, 0.14);
+    }
+
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: var(--paper);
+    }
+
+    body {
+      color: var(--ink);
+      font-family: "Aptos", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      user-select: none;
+      touch-action: none;
+    }
+
+    button { font: inherit; }
+    button, canvas { -webkit-tap-highlight-color: transparent; }
+
+    #app {
+      position: fixed;
+      inset: 0;
+      isolation: isolate;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 20% 10%, rgba(255, 252, 238, 0.72), transparent 42%),
+        radial-gradient(circle at 85% 85%, rgba(119, 96, 55, 0.08), transparent 46%),
+        var(--paper);
+    }
+
+    #app::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: 20;
+      pointer-events: none;
+      opacity: 0.16;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.82' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.24'/%3E%3C/svg%3E");
+      mix-blend-mode: multiply;
+    }
+
+    #world {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      cursor: crosshair;
+      outline: none;
+    }
+
+    .topbar {
+      position: absolute;
+      z-index: 5;
+      top: max(16px, env(safe-area-inset-top));
+      left: 20px;
+      right: 20px;
+      min-height: 62px;
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) auto minmax(220px, 1fr);
+      align-items: center;
+      gap: 18px;
+      padding: 10px 14px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: rgba(243, 236, 217, 0.94);
+      box-shadow: var(--shadow);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .brand-mark {
+      width: 38px;
+      height: 38px;
+      flex: 0 0 auto;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--ink);
+      border-radius: 50%;
+      font-family: Georgia, serif;
+      font-size: 21px;
+      font-style: italic;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 22px;
+      font-weight: 400;
+      letter-spacing: -0.03em;
+      white-space: nowrap;
+    }
+
+    .brand p {
+      margin: 2px 0 0;
+      color: var(--muted);
+      font-size: 10px;
+      letter-spacing: 0.08em;
+    }
+
+    .epoch {
+      text-align: center;
+      min-width: 190px;
+    }
+
+    .epoch-line {
+      display: flex;
+      justify-content: center;
+      align-items: baseline;
+      gap: 9px;
+      font-family: Georgia, serif;
+      font-size: 17px;
+    }
+
+    .epoch-line strong { font-weight: 400; font-size: 23px; }
+    .epoch-line span { color: var(--muted); font-size: 12px; }
+    .epoch-track { height: 3px; margin-top: 7px; background: rgba(38, 51, 45, 0.12); overflow: hidden; }
+    .epoch-fill { width: 0; height: 100%; background: var(--moss); transition: width 160ms linear; }
+
+    .top-actions {
+      justify-self: end;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .button {
+      min-height: 36px;
+      padding: 0 13px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      color: var(--ink);
+      background: rgba(255, 252, 240, 0.52);
+      cursor: pointer;
+      transition: background 140ms ease, color 140ms ease, transform 140ms ease;
+    }
+
+    .button:hover { background: var(--paper-light); transform: translateY(-1px); }
+    .button:active { transform: translateY(0); }
+    .button.primary { color: var(--paper-light); background: var(--moss-dark); border-color: var(--moss-dark); }
+    .button.primary:hover { background: #314335; }
+    .button:focus-visible, .brush:focus-visible { outline: 2px solid var(--rust); outline-offset: 3px; }
+
+    .sidebar {
+      position: absolute;
+      z-index: 4;
+      top: 96px;
+      bottom: 22px;
+      width: 218px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: rgba(243, 236, 217, 0.94);
+      box-shadow: var(--shadow);
+      overflow-y: auto;
+      scrollbar-width: thin;
+      touch-action: pan-y;
+    }
+
+    .sidebar.left { left: 20px; }
+    .sidebar.right { right: 20px; width: 238px; }
+
+    .section-title {
+      margin: 0 0 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.13em;
+    }
+
+    .brush-list { display: grid; gap: 6px; }
+
+    .brush {
+      display: grid;
+      grid-template-columns: 28px 1fr auto;
+      align-items: center;
+      gap: 9px;
+      min-height: 42px;
+      padding: 6px 9px;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      color: var(--ink);
+      background: transparent;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .brush:hover { background: rgba(38, 51, 45, 0.05); }
+    .brush.active { color: var(--paper-light); background: var(--moss-dark); border-color: var(--moss-dark); }
+    .brush-symbol { font-family: Georgia, serif; font-size: 20px; text-align: center; }
+    .brush-name { font-size: 12px; font-weight: 650; }
+    .brush-note { display: block; margin-top: 1px; color: var(--muted); font-size: 9px; font-weight: 400; }
+    .brush.active .brush-note { color: rgba(243, 236, 217, 0.66); }
+    .brush-key { color: var(--muted); font-size: 9px; }
+    .brush.active .brush-key { color: rgba(243, 236, 217, 0.66); }
+
+    .tool-section { margin-top: 18px; }
+    .tool-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .tool-grid .button { min-height: 34px; padding: 0 8px; font-size: 10px; }
+
+    .note {
+      margin: 16px 0 0;
+      color: var(--muted);
+      font-family: Georgia, serif;
+      font-size: 11px;
+      font-style: italic;
+      line-height: 1.55;
+    }
+
+    .season-block {
+      display: grid;
+      grid-template-columns: 76px 1fr;
+      gap: 13px;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .season-wheel {
+      position: relative;
+      width: 76px;
+      height: 76px;
+      border: 1px solid var(--line);
+      border-radius: 50%;
+      background: conic-gradient(from 0deg, #9aab7d 0deg 90deg, #c3a35d 90deg 180deg, #a45f43 180deg 270deg, #829596 270deg 360deg);
+      box-shadow: inset 0 0 0 7px rgba(243, 236, 217, 0.72);
+    }
+
+    .season-wheel::after {
+      content: "";
+      position: absolute;
+      inset: 25px;
+      border: 1px solid var(--line);
+      border-radius: 50%;
+      background: var(--paper-light);
+    }
+
+    .wheel-marker {
+      position: absolute;
+      inset: -3px;
+      z-index: 2;
+      transform: rotate(0deg);
+    }
+
+    .wheel-marker::before {
+      content: "";
+      position: absolute;
+      top: -2px;
+      left: 50%;
+      width: 2px;
+      height: 13px;
+      background: var(--ink);
+      transform: translateX(-50%);
+    }
+
+    .season-copy strong { display: block; font-family: Georgia, serif; font-size: 19px; font-weight: 400; }
+    .season-copy span { display: block; margin-top: 4px; color: var(--muted); font-size: 10px; line-height: 1.45; }
+
+    .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+    .stat {
+      padding: 9px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: rgba(255, 252, 240, 0.32);
+    }
+    .stat span { display: block; color: var(--muted); font-size: 9px; }
+    .stat strong { display: block; margin-top: 4px; font-size: 18px; font-weight: 650; font-variant-numeric: tabular-nums; }
+    .stat.wide { grid-column: span 2; }
+
+    .climate { margin-top: 16px; display: grid; gap: 8px; }
+    .climate-row { display: grid; grid-template-columns: 74px 1fr 34px; gap: 8px; align-items: center; font-size: 10px; }
+    .climate-track { height: 4px; background: rgba(38, 51, 45, 0.1); }
+    .climate-fill { height: 100%; width: 50%; background: var(--moss); }
+    .climate-value { color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+
+    .genes { margin-top: 16px; display: grid; gap: 7px; }
+    .gene-row { display: grid; grid-template-columns: 78px 1fr 28px; gap: 7px; align-items: center; font-size: 9px; }
+    .gene-track { height: 4px; background: rgba(38, 51, 45, 0.1); }
+    .gene-fill { height: 100%; width: 50%; background: var(--ochre); transition: width 220ms ease; }
+    .gene-value { color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+
+    .bottom-panel {
+      position: absolute;
+      z-index: 4;
+      left: 254px;
+      right: 274px;
+      bottom: 22px;
+      height: 132px;
+      display: grid;
+      grid-template-columns: minmax(0, 1.4fr) minmax(190px, 0.6fr);
+      gap: 12px;
+      pointer-events: none;
+    }
+
+    .paper-box {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: rgba(243, 236, 217, 0.94);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .chart-box { padding: 10px 12px 8px; }
+    .chart-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+    .chart-head h2 { margin: 0; font-family: Georgia, serif; font-size: 14px; font-weight: 400; }
+    .chart-legend { display: flex; gap: 9px; color: var(--muted); font-size: 8px; }
+    .legend-dot { display: inline-block; width: 6px; height: 6px; margin-right: 3px; border-radius: 50%; }
+    #population-canvas { width: 100%; height: 88px; display: block; }
+
+    .log-box { padding: 10px 12px; }
+    .log-box h2 { margin: 0 0 7px; font-family: Georgia, serif; font-size: 14px; font-weight: 400; }
+    #event-log { display: grid; gap: 5px; max-height: 90px; overflow: hidden; }
+    .log-entry { display: grid; grid-template-columns: 34px 1fr; gap: 6px; color: var(--muted); font-size: 9px; line-height: 1.3; }
+    .log-entry time { color: var(--rust); font-variant-numeric: tabular-nums; }
+
+    .renderer-label {
+      position: absolute;
+      z-index: 3;
+      left: 50%;
+      bottom: 166px;
+      transform: translateX(-50%);
+      color: rgba(38, 51, 45, 0.48);
+      font-family: Georgia, serif;
+      font-size: 10px;
+      font-style: italic;
+      pointer-events: none;
+    }
+
+    .intro {
+      position: absolute;
+      inset: 0;
+      z-index: 30;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      overflow-y: auto;
+      background: rgba(233, 224, 203, 0.9);
+    }
+
+    .intro-book {
+      position: relative;
+      width: min(760px, 100%);
+      padding: clamp(28px, 5vw, 58px);
+      border: 1px solid rgba(38, 51, 45, 0.32);
+      border-radius: 4px;
+      background:
+        linear-gradient(90deg, rgba(111, 88, 49, 0.08), transparent 8%, transparent 92%, rgba(111, 88, 49, 0.08)),
+        var(--paper-light);
+      box-shadow: 0 30px 100px rgba(61, 48, 30, 0.24), inset 0 0 60px rgba(111, 88, 49, 0.06);
+      text-align: center;
+    }
+
+    .intro-book::before, .intro-book::after {
+      content: "";
+      position: absolute;
+      top: 18px;
+      bottom: 18px;
+      width: 1px;
+      background: var(--line);
+    }
+    .intro-book::before { left: 18px; }
+    .intro-book::after { right: 18px; }
+
+    .intro-kicker { margin: 0 0 16px; color: var(--rust); font-size: 10px; font-weight: 700; letter-spacing: 0.16em; }
+    .intro-book h2 { margin: 0; font-family: Georgia, serif; font-size: clamp(38px, 7vw, 68px); font-weight: 400; letter-spacing: -0.05em; }
+    .intro-book h2 em { color: var(--moss-dark); font-weight: 400; }
+    .intro-book p { max-width: 560px; margin: 22px auto 26px; color: var(--muted); font-family: Georgia, serif; font-size: 15px; line-height: 1.65; }
+    .intro-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 10px; }
+    .intro-actions .button { min-height: 44px; padding: 0 20px; }
+    .intro-foot { margin-top: 24px; color: var(--muted); font-size: 10px; }
+
+    .help {
+      position: absolute;
+      inset: 0;
+      z-index: 40;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background: rgba(38, 51, 45, 0.42);
+    }
+
+    .help-panel {
+      width: min(620px, 100%);
+      padding: 28px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--paper-light);
+      box-shadow: var(--shadow);
+    }
+    .help-panel h2 { margin: 0 0 14px; font-family: Georgia, serif; font-size: 30px; font-weight: 400; }
+    .help-panel p, .help-panel li { color: var(--muted); font-size: 13px; line-height: 1.6; }
+    .help-panel ul { padding-left: 20px; }
+    .help-actions { display: flex; justify-content: flex-end; margin-top: 20px; }
+
+    @media (max-width: 1100px) {
+      .sidebar { width: 190px; padding: 12px; }
+      .sidebar.right { width: 210px; }
+      .bottom-panel { left: 226px; right: 246px; grid-template-columns: 1fr; }
+      .log-box { display: none; }
+      .brand p { display: none; }
+    }
+
+    @media (max-width: 820px) {
+      .topbar { grid-template-columns: 1fr auto; left: 12px; right: 12px; top: 12px; }
+      .epoch { display: none; }
+      .sidebar.left { left: 12px; top: 84px; bottom: auto; width: 172px; max-height: calc(100dvh - 180px); }
+      .sidebar.right { display: none; }
+      .bottom-panel { left: 12px; right: 12px; bottom: 12px; height: 112px; }
+      .renderer-label { bottom: 136px; }
+      .brand h1 { font-size: 18px; }
+      .brush { min-height: 38px; }
+      .brush-note, .brush-key { display: none; }
+    }
+
+    @media (max-width: 520px) {
+      .top-actions .button:not(.primary) { display: none; }
+      .sidebar.left { width: 148px; padding: 9px; }
+      .section-title { font-size: 9px; }
+      .brush { grid-template-columns: 24px 1fr; padding: 5px 6px; }
+      .brush-symbol { font-size: 17px; }
+      .brush-name { font-size: 10px; }
+      .intro-book { padding: 28px 22px; }
+      .intro-book p { font-size: 13px; }
+    }
+
+    @media (max-width: 820px) and (orientation: portrait) {
+      .sidebar.left {
+        top: auto;
+        left: 12px;
+        right: 12px;
+        bottom: 136px;
+        width: auto;
+        max-height: 148px;
+        padding: 9px;
+      }
+      .brush-list { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; touch-action: pan-x; }
+      .brush { flex: 0 0 auto; min-width: 108px; grid-template-columns: 24px auto; }
+      .tool-section, .note { display: none; }
+      .renderer-label { display: none; }
+    }
+
+    @media (max-height: 520px) {
+      .intro { padding: 12px; place-items: start center; }
+      .intro-book { padding: 20px 24px; max-height: calc(100dvh - 24px); overflow-y: auto; }
+      .intro-kicker { margin-bottom: 8px; font-size: 9px; }
+      .intro-book h2 { font-size: 34px; }
+      .intro-book p { margin: 12px auto 16px; font-size: 12px; line-height: 1.45; }
+      .intro-actions .button { min-height: 38px; }
+      .intro-foot { margin-top: 12px; font-size: 9px; }
+    }
+
+    @media (min-height: 1600px) and (min-width: 900px) {
+      .sidebar.left { width: 250px; padding: 18px; }
+      .sidebar.right { width: 270px; padding: 18px; }
+      .bottom-panel { left: 286px; right: 306px; height: 150px; }
+      .renderer-label { bottom: 196px; }
+      .brush { min-height: 48px; }
+      .brush-name { font-size: 13px; }
+    }
+
+    @media (min-width: 2200px) {
+      .intro-book { width: min(1000px, 100%); padding: 72px; }
+      .intro-book h2 { font-size: 82px; }
+      .intro-book p { font-size: 19px; }
+      .topbar { min-height: 82px; padding: 14px 20px; }
+      .brand h1 { font-size: 30px; }
+      .brand p { font-size: 13px; }
+      .brand-mark { width: 50px; height: 50px; font-size: 28px; }
+      .epoch-line { font-size: 22px; }
+      .epoch-line strong { font-size: 30px; }
+      .button { min-height: 46px; padding: 0 18px; font-size: 14px; }
+      .sidebar { top: 122px; bottom: 30px; width: 290px; padding: 22px; }
+      .sidebar.right { width: 320px; }
+      .section-title { font-size: 13px; }
+      .brush { min-height: 54px; }
+      .brush-name { font-size: 15px; }
+      .brush-note { font-size: 11px; }
+      .season-wheel { width: 96px; height: 96px; }
+      .season-block { grid-template-columns: 96px 1fr; }
+      .stat strong { font-size: 24px; }
+      .stat span { font-size: 11px; }
+      .climate-row, .gene-row { font-size: 12px; }
+      .bottom-panel { left: 332px; right: 362px; bottom: 30px; height: 170px; }
+      .chart-head h2, .log-box h2 { font-size: 18px; }
+      #population-canvas { height: 118px; }
+      .renderer-label { bottom: 216px; font-size: 13px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { transition-duration: 1ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <main id="app">
+    <canvas id="world" tabindex="0" aria-label="Живой кодекс. Интерактивная экосистема. Рисуй жизнь выбранной кистью, пробел — пауза."></canvas>
+
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">Ж</div>
+        <div>
+          <h1>Живой кодекс</h1>
+          <p>GameHungerGEvo · наследственная экосистема</p>
+        </div>
+      </div>
+      <div class="epoch">
+        <div class="epoch-line"><strong id="epoch">Эпоха 1</strong><span id="season-name">Весна</span></div>
+        <div class="epoch-track"><div id="epoch-fill" class="epoch-fill"></div></div>
+      </div>
+      <div class="top-actions">
+        <button id="help-button" class="button" type="button">Как наблюдать</button>
+        <button id="speed-button" class="button" type="button" title="Скорость (+)">1×</button>
+        <button id="pause-button" class="button primary" type="button" title="Пауза (Space)">Пауза</button>
+        <button id="reset-button" class="button" type="button" title="Новая колония (R)">Новая колония</button>
+      </div>
+    </header>
+
+    <aside class="sidebar left" aria-label="Палитра исследователя">
+      <h2 class="section-title">Палитра натуралиста</h2>
+      <div id="brush-tools" class="brush-list">
+        <button class="brush active" type="button" data-brush="1"><span class="brush-symbol">✿</span><span class="brush-name">Продуцент<span class="brush-note">свет, вода, питание</span></span><span class="brush-key">1</span></button>
+        <button class="brush" type="button" data-brush="2"><span class="brush-symbol">❧</span><span class="brush-name">Консумент<span class="brush-note">питается продуцентами</span></span><span class="brush-key">2</span></button>
+        <button class="brush" type="button" data-brush="3"><span class="brush-symbol">◆</span><span class="brush-name">Хищник<span class="brush-note">регулирует популяцию</span></span><span class="brush-key">3</span></button>
+        <button class="brush" type="button" data-brush="4"><span class="brush-symbol">⁂</span><span class="brush-name">Паразит<span class="brush-note">ослабляет хозяина</span></span><span class="brush-key">4</span></button>
+        <button class="brush" type="button" data-brush="5"><span class="brush-symbol">⌁</span><span class="brush-name">Редуцент<span class="brush-note">разлагает детрит</span></span><span class="brush-key">5</span></button>
+        <button class="brush" type="button" data-brush="water"><span class="brush-symbol">≈</span><span class="brush-name">Вода<span class="brush-note">повышает влажность</span></span><span class="brush-key">6</span></button>
+        <button class="brush" type="button" data-brush="nutrient"><span class="brush-symbol">·</span><span class="brush-name">Питание<span class="brush-note">удобряет почву</span></span><span class="brush-key">7</span></button>
+        <button class="brush" type="button" data-brush="rock"><span class="brush-symbol">⬟</span><span class="brush-name">Камень<span class="brush-note">запрещает рост</span></span><span class="brush-key">8</span></button>
+        <button class="brush" type="button" data-brush="erase"><span class="brush-symbol">○</span><span class="brush-name">Ластик<span class="brush-note">очищает клетку</span></span><span class="brush-key">9</span></button>
+      </div>
+
+      <div class="tool-section">
+        <h2 class="section-title">Вмешательство</h2>
+        <div class="tool-grid">
+          <button id="rain-button" class="button" type="button">Дождь</button>
+          <button id="drought-button" class="button" type="button">Засуха</button>
+          <button id="fertilize-button" class="button" type="button">Удобрение</button>
+          <button id="climate-button" class="button" type="button">Слой климата</button>
+        </div>
+      </div>
+      <p class="note">Не стремись заполнить лист. Наблюдай, какие линии потомков переживут зиму.</p>
+    </aside>
+
+    <aside class="sidebar right" aria-label="Наблюдения">
+      <h2 class="section-title">Полевые наблюдения</h2>
+      <div class="season-block">
+        <div id="season-wheel" class="season-wheel" aria-hidden="true"><div id="wheel-marker" class="wheel-marker"></div></div>
+        <div class="season-copy"><strong id="season-large">Весна</strong><span id="season-note">Свет возвращается. Продуценты начинают рост.</span></div>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat"><span>Продуценты</span><strong id="count-producer">0</strong></div>
+        <div class="stat"><span>Консументы</span><strong id="count-consumer">0</strong></div>
+        <div class="stat"><span>Хищники</span><strong id="count-predator">0</strong></div>
+        <div class="stat"><span>Паразиты</span><strong id="count-parasite">0</strong></div>
+        <div class="stat"><span>Редуценты</span><strong id="count-decomposer">0</strong></div>
+        <div class="stat"><span>Мутации</span><strong id="mutations">0</strong></div>
+        <div class="stat wide"><span>Разнообразие · родовые линии</span><strong id="diversity">0,00 · 0</strong></div>
+      </div>
+
+      <div class="climate">
+        <div class="climate-row"><span>Температура</span><div class="climate-track"><div id="temp-fill" class="climate-fill"></div></div><span id="temp-value" class="climate-value">0</span></div>
+        <div class="climate-row"><span>Влажность</span><div class="climate-track"><div id="moisture-fill" class="climate-fill"></div></div><span id="moisture-value" class="climate-value">0</span></div>
+        <div class="climate-row"><span>Питание</span><div class="climate-track"><div id="nutrient-fill" class="climate-fill"></div></div><span id="nutrient-value" class="climate-value">0</span></div>
+      </div>
+
+      <div class="tool-section">
+        <h2 class="section-title">Дрейф генов</h2>
+        <div id="gene-bars" class="genes"></div>
+      </div>
+    </aside>
+
+    <section class="bottom-panel" aria-label="Динамика популяций">
+      <div class="paper-box chart-box">
+        <div class="chart-head">
+          <h2>Популяции</h2>
+          <div class="chart-legend">
+            <span><i class="legend-dot" style="background:#60755b"></i>продуценты</span>
+            <span><i class="legend-dot" style="background:#b18b4e"></i>консументы</span>
+            <span><i class="legend-dot" style="background:#a45f43"></i>хищники</span>
+            <span><i class="legend-dot" style="background:#813d43"></i>паразиты</span>
+          </div>
+        </div>
+        <canvas id="population-canvas" aria-label="График популяций"></canvas>
+      </div>
+      <div class="paper-box log-box">
+        <h2>Заметки на полях</h2>
+        <div id="event-log"></div>
+      </div>
+    </section>
+
+    <div id="renderer-label" class="renderer-label">Бумага · тушь · наследственность</div>
+
+    <section id="intro" class="intro" aria-labelledby="intro-title">
+      <div class="intro-book">
+        <p class="intro-kicker">GameHungerGEvo · интерактивный естественный отбор</p>
+        <h2 id="intro-title">Живой <em>кодекс</em></h2>
+        <p>Это не просто Игра Жизнь. Здесь продуценты подчиняются правилу Конвея, но вокруг них возникает пищевая сеть. Организмы наследуют признаки, мутируют, заражаются паразитами и адаптируются к смене сезонов.</p>
+        <div class="intro-actions">
+          <button id="start-button" class="button primary" type="button">Открыть кодекс</button>
+          <button id="intro-help" class="button" type="button">Правила наблюдения</button>
+        </div>
+        <div class="intro-foot">Рисуй кистью · Space — пауза · 1–9 — виды · C — климат · R — новая колония</div>
+      </div>
+    </section>
+
+    <section id="help" class="help" hidden aria-labelledby="help-title">
+      <div class="help-panel">
+        <h2 id="help-title">Как читать кодекс</h2>
+        <p>Каждая клетка — организм или среда. Продуценты растут по классическому правилу Конвея B3/S23, если хватает света, влаги и питания.</p>
+        <ul>
+          <li>Консументы поедают продуцентов, хищники — консументов и паразитов.</li>
+          <li>Паразиты не убивают сразу: они повышают нагрузку и постепенно отнимают энергию.</li>
+          <li>Редуценты разлагают детрит и возвращают питание в почву.</li>
+          <li>При размножении шесть признаков наследуются с мутациями. Зима отбирает тех, кто хуже переносит холод.</li>
+          <li>Кисть добавляет новый род. Дождь, засуха и удобрение меняют условия отбора.</li>
+        </ul>
+        <p>Пробел — пауза, «+»/«−» — скорость, C — слой климата, R — новая колония. Правая кнопка мыши работает ластиком.</p>
+        <div class="help-actions"><button id="close-help" class="button primary" type="button">Вернуться к наблюдению</button></div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (() => {
+      "use strict";
+
+      const GRID_WIDTH = 180;
+      const GRID_HEIGHT = 100;
+      const CELL_COUNT = GRID_WIDTH * GRID_HEIGHT;
+      const GENE_COUNT = 6;
+      const STEP_SECONDS = 1 / 12;
+      const YEAR_SECONDS = 96;
+      const TICKS_PER_YEAR = Math.round(YEAR_SECONDS / STEP_SECONDS);
+      const TAU = Math.PI * 2;
+
+      const TYPE = Object.freeze({ EMPTY: 0, PRODUCER: 1, CONSUMER: 2, PREDATOR: 3, PARASITE: 4, DECOMPOSER: 5 });
+      const TERRAIN = Object.freeze({ SOIL: 0, ROCK: 1, WATER: 2 });
+      const TYPE_NAMES = ["", "Продуцент", "Консумент", "Хищник", "Паразит", "Редуцент"];
+      const SEASONS = [
+        { name: "Весна", note: "Свет возвращается. Продуценты начинают рост.", temperature: 0.42, light: 0.68, rain: 0.72 },
+        { name: "Лето", note: "Тепло и буйный рост. Пищевые цепочки ускоряются.", temperature: 0.76, light: 1.0, rain: 0.34 },
+        { name: "Осень", note: "Свет гаснет. Детрит и редуценты выходят вперёд.", temperature: 0.5, light: 0.52, rain: 0.62 },
+        { name: "Зима", note: "Холод отбирает наиболее уязвимые роды.", temperature: 0.17, light: 0.28, rain: 0.42 }
+      ];
+      const BASE_GENES = [
+        [0, 0, 0, 0, 0, 0],
+        [0.92, 1.05, 0.12, 0.12, 0.34, 0.52],
+        [1.12, 1.0, 0.48, 0.3, 0.38, 0.5],
+        [1.28, 0.82, 0.72, 0.82, 0.56, 0.48],
+        [0.78, 1.34, 0.2, 0.52, 0.18, 0.62],
+        [0.86, 1.12, 0.16, 0.16, 0.42, 0.58]
+      ];
+      const GENE_MIN = [0.5, 0.4, 0, 0, 0, 0];
+      const GENE_MAX = [1.65, 1.8, 1, 1, 1, 1];
+      const GENE_LABELS = ["Обмен", "Плодовитость", "Подвижность", "Атака", "Защита", "Терпимость"];
+      const REPRODUCTION_CHANCE = [0, 0.2, 0.16, 0.18, 0.12, 0.04];
+
+      const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+      const lerp = (a, b, t) => a + (b - a) * t;
+
+      function makeRng(seed) {
+        let state = seed >>> 0 || 1;
+        return () => {
+          state ^= state << 13;
+          state ^= state >>> 17;
+          state ^= state << 5;
+          return (state >>> 0) / 4294967296;
+        };
+      }
+
+      function hash2(x, y, seed) {
+        let value = Math.imul(x + seed * 17, 374761393) + Math.imul(y + seed * 31, 668265263);
+        value = Math.imul(value ^ (value >>> 13), 1274126177);
+        return ((value ^ (value >>> 16)) >>> 0) / 4294967295;
+      }
+
+      function smoothNoise(x, y, seed) {
+        const ix = Math.floor(x);
+        const iy = Math.floor(y);
+        const fx = x - ix;
+        const fy = y - iy;
+        const sx = fx * fx * (3 - 2 * fx);
+        const sy = fy * fy * (3 - 2 * fy);
+        const a = hash2(ix, iy, seed);
+        const b = hash2(ix + 1, iy, seed);
+        const c = hash2(ix, iy + 1, seed);
+        const d = hash2(ix + 1, iy + 1, seed);
+        return lerp(lerp(a, b, sx), lerp(c, d, sx), sy);
+      }
+
+      function fbm(x, y, seed) {
+        let value = 0;
+        let amplitude = 0.55;
+        let frequency = 1;
+        for (let i = 0; i < 4; i += 1) {
+          value += smoothNoise(x * frequency, y * frequency, seed + i * 101) * amplitude;
+          amplitude *= 0.5;
+          frequency *= 2;
+        }
+        return value;
+      }
+
+      class Ecology {
+        constructor(seed = Date.now()) {
+          this.width = GRID_WIDTH;
+          this.height = GRID_HEIGHT;
+          this.size = CELL_COUNT;
+          this.geneCount = GENE_COUNT;
+          this.neighbors = new Int32Array(CELL_COUNT * 8);
+          this.buildNeighborTable();
+
+          this.life = new Uint8Array(CELL_COUNT);
+          this.nextLife = new Uint8Array(CELL_COUNT);
+          this.energy = new Float32Array(CELL_COUNT);
+          this.nextEnergy = new Float32Array(CELL_COUNT);
+          this.age = new Uint16Array(CELL_COUNT);
+          this.nextAge = new Uint16Array(CELL_COUNT);
+          this.cooldown = new Uint8Array(CELL_COUNT);
+          this.nextCooldown = new Uint8Array(CELL_COUNT);
+          this.genes = new Float32Array(CELL_COUNT * GENE_COUNT);
+          this.nextGenes = new Float32Array(CELL_COUNT * GENE_COUNT);
+          this.lineage = new Uint32Array(CELL_COUNT);
+          this.nextLineage = new Uint32Array(CELL_COUNT);
+          this.infection = new Float32Array(CELL_COUNT);
+          this.nextInfection = new Float32Array(CELL_COUNT);
+
+          this.terrain = new Uint8Array(CELL_COUNT);
+          this.elevation = new Float32Array(CELL_COUNT);
+          this.moisture = new Float32Array(CELL_COUNT);
+          this.nextMoisture = new Float32Array(CELL_COUNT);
+          this.nutrients = new Float32Array(CELL_COUNT);
+          this.nextNutrients = new Float32Array(CELL_COUNT);
+          this.temperature = new Float32Array(CELL_COUNT);
+          this.nextTemperature = new Float32Array(CELL_COUNT);
+          this.detritus = new Float32Array(CELL_COUNT);
+          this.nextDetritus = new Float32Array(CELL_COUNT);
+          this.spores = new Float32Array(CELL_COUNT);
+          this.nextSpores = new Float32Array(CELL_COUNT);
+          this.sporeType = new Uint8Array(CELL_COUNT);
+          this.nextSporeType = new Uint8Array(CELL_COUNT);
+
+          this.stateData = new Uint8Array(CELL_COUNT * 4);
+          this.climateData = new Uint8Array(CELL_COUNT * 4);
+          this.terrainData = new Uint8Array(CELL_COUNT * 4);
+
+          this.claimed = new Int32Array(CELL_COUNT);
+          this.claimPriority = new Float32Array(CELL_COUNT);
+          this.eaten = new Uint8Array(CELL_COUNT);
+          this.counts = new Uint8Array(6);
+          this.geneSumsScratch = new Float64Array(GENE_COUNT);
+          this.mutationRate = 0.045;
+          this.historyLimit = 240;
+          this.revision = 0;
+          this.reset(seed);
+        }
+
+        buildNeighborTable() {
+          for (let y = 0; y < this.height; y += 1) {
+            for (let x = 0; x < this.width; x += 1) {
+              const index = y * this.width + x;
+              let slot = 0;
+              for (let dy = -1; dy <= 1; dy += 1) {
+                for (let dx = -1; dx <= 1; dx += 1) {
+                  if (dx === 0 && dy === 0) continue;
+                  const nx = x + dx;
+                  const ny = y + dy;
+                  this.neighbors[index * 8 + slot] = nx < 0 || nx >= this.width || ny < 0 || ny >= this.height ? -1 : ny * this.width + nx;
+                  slot += 1;
+                }
+              }
+            }
+          }
+        }
+
+        reset(seed = Date.now()) {
+          this.seed = seed >>> 0;
+          this.rng = makeRng(this.seed);
+          this.tick = 0;
+          this.time = 0;
+          this.year = 1;
+          this.seasonIndex = 0;
+          this.seasonPhase = 0;
+          this.globalTemperature = SEASONS[0].temperature;
+          this.globalLight = SEASONS[0].light;
+          this.globalRain = SEASONS[0].rain;
+          this.nextLineageId = 1;
+          this.totalMutations = 0;
+          this.events = [];
+          this.history = [];
+          this.terrainDirty = true;
+          this.orderOffset = 0;
+
+          this.life.fill(0);
+          this.nextLife.fill(0);
+          this.energy.fill(0);
+          this.nextEnergy.fill(0);
+          this.age.fill(0);
+          this.nextAge.fill(0);
+          this.cooldown.fill(0);
+          this.nextCooldown.fill(0);
+          this.genes.fill(0);
+          this.nextGenes.fill(0);
+          this.lineage.fill(0);
+          this.nextLineage.fill(0);
+          this.infection.fill(0);
+          this.nextInfection.fill(0);
+          this.detritus.fill(0);
+          this.nextDetritus.fill(0);
+          this.spores.fill(0);
+          this.nextSpores.fill(0);
+          this.sporeType.fill(0);
+          this.nextSporeType.fill(0);
+
+          for (let y = 0; y < this.height; y += 1) {
+            for (let x = 0; x < this.width; x += 1) {
+              const index = y * this.width + x;
+              const nx = (x / this.width - 0.5) * 2;
+              const ny = (y / this.height - 0.5) * 2;
+              const radial = Math.sqrt(nx * nx * 0.82 + ny * ny * 1.18);
+              const noise = fbm(x * 0.055, y * 0.055, this.seed);
+              const elevation = clamp(0.66 - radial * 0.48 + (noise - 0.5) * 0.62, 0, 1);
+              this.elevation[index] = elevation;
+              if (elevation < 0.25) {
+                this.terrain[index] = TERRAIN.WATER;
+                this.moisture[index] = 0.95;
+                this.nutrients[index] = 0.42;
+              } else if (elevation > 0.79) {
+                this.terrain[index] = TERRAIN.ROCK;
+                this.moisture[index] = 0.16;
+                this.nutrients[index] = 0.05;
+              } else {
+                this.terrain[index] = TERRAIN.SOIL;
+                this.moisture[index] = clamp(0.25 + noise * 0.6, 0.15, 0.9);
+                this.nutrients[index] = clamp(0.22 + noise * 0.62, 0.1, 0.85);
+              }
+              this.temperature[index] = this.globalTemperature;
+            }
+          }
+
+          this.seedCluster(TYPE.PRODUCER, 20, 3, 7);
+          this.seedNear(TYPE.CONSUMER, TYPE.PRODUCER, 28);
+          this.seedNear(TYPE.PREDATOR, TYPE.CONSUMER, 24);
+          this.seedNear(TYPE.PARASITE, TYPE.PRODUCER, 24);
+          this.seedNear(TYPE.DECOMPOSER, TYPE.PRODUCER, 24);
+          this.updateStats();
+          this.recordHistory();
+          this.log("Кодекс открыт. Первые роды внесены на страницу.");
+          this.writeTerrainData();
+          this.revision += 1;
+        }
+
+        seedCluster(type, clusters, minRadius, maxRadius) {
+          for (let cluster = 0; cluster < clusters; cluster += 1) {
+            let center = -1;
+            for (let attempt = 0; attempt < 80; attempt += 1) {
+              const candidate = Math.floor(this.rng() * CELL_COUNT);
+              if (this.terrain[candidate] === TERRAIN.SOIL && this.life[candidate] === TYPE.EMPTY) {
+                center = candidate;
+                break;
+              }
+            }
+            if (center < 0) continue;
+            const cx = center % this.width;
+            const cy = Math.floor(center / this.width);
+            const radius = minRadius + Math.floor(this.rng() * (maxRadius - minRadius + 1));
+            for (let y = cy - radius; y <= cy + radius; y += 1) {
+              for (let x = cx - radius; x <= cx + radius; x += 1) {
+                if (x < 0 || x >= this.width || y < 0 || y >= this.height) continue;
+                const dx = x - cx;
+                const dy = y - cy;
+                if (dx * dx + dy * dy > radius * radius) continue;
+                const index = y * this.width + x;
+                if (this.terrain[index] === TERRAIN.SOIL && this.life[index] === TYPE.EMPTY && this.rng() > 0.18) {
+                  this.seedOrganism(index, type);
+                }
+              }
+            }
+          }
+        }
+
+        seedNear(type, targetType, count) {
+          const candidates = [];
+          for (let i = 0; i < CELL_COUNT; i += 1) if (this.life[i] === targetType) candidates.push(i);
+          for (let i = 0; i < count && candidates.length > 0; i += 1) {
+            const source = candidates[Math.floor(this.rng() * candidates.length)];
+            const sx = source % this.width;
+            const sy = Math.floor(source / this.width);
+            let target = -1;
+            for (let attempt = 0; attempt < 12; attempt += 1) {
+              const tx = sx + Math.floor(this.rng() * 5) - 2;
+              const ty = sy + Math.floor(this.rng() * 5) - 2;
+              if (tx < 0 || tx >= this.width || ty < 0 || ty >= this.height) continue;
+              const index = ty * this.width + tx;
+              if (this.terrain[index] === TERRAIN.SOIL && this.life[index] === TYPE.EMPTY) {
+                target = index;
+                break;
+              }
+            }
+            if (target >= 0) {
+              this.seedOrganism(target, type);
+              if (type === TYPE.DECOMPOSER) this.detritus[target] = 0.18 + this.rng() * 0.12;
+            }
+          }
+        }
+
+        randomGenome(type) {
+          const target = new Float32Array(GENE_COUNT);
+          for (let gene = 0; gene < GENE_COUNT; gene += 1) {
+            target[gene] = clamp(BASE_GENES[type][gene] + (this.rng() - 0.5) * 0.16, GENE_MIN[gene], GENE_MAX[gene]);
+          }
+          return target;
+        }
+
+        seedOrganism(index, type, genome = null, lineage = 0) {
+          if (index < 0 || index >= CELL_COUNT || this.terrain[index] !== TERRAIN.SOIL) return false;
+          const genes = genome || this.randomGenome(type);
+          const offset = index * GENE_COUNT;
+          for (let gene = 0; gene < GENE_COUNT; gene += 1) this.genes[offset + gene] = genes[gene];
+          this.life[index] = type;
+          this.energy[index] = type === TYPE.PRODUCER ? 0.8 : type === TYPE.CONSUMER ? 1.0 : type === TYPE.PREDATOR ? 1.25 : type === TYPE.PARASITE ? 0.75 : 0.95;
+          this.age[index] = 0;
+          this.cooldown[index] = 4 + Math.floor(this.rng() * 10);
+          this.infection[index] = 0;
+          this.lineage[index] = lineage || this.nextLineageId++;
+          return true;
+        }
+
+        mutateGenes(sourceOffset, targetOffset, sourceGenes = this.genes, targetGenes = this.nextGenes) {
+          if (this.rng() > 0.18) return 0;
+          let mutations = 0;
+          const traitCount = this.rng() < 0.12 ? 2 : 1;
+          for (let i = 0; i < traitCount; i += 1) {
+            const gene = Math.floor(this.rng() * GENE_COUNT);
+            const before = sourceGenes[sourceOffset + gene];
+            const delta = (this.rng() * 2 - 1) * this.mutationRate;
+            const after = clamp(before + delta, GENE_MIN[gene], GENE_MAX[gene]);
+            targetGenes[targetOffset + gene] = after;
+            if (Math.abs(after - before) > 0.001) mutations += 1;
+          }
+          this.totalMutations += mutations;
+          return mutations;
+        }
+
+        inheritGenes(sourceOffset, targetOffset, mutate = true) {
+          for (let gene = 0; gene < GENE_COUNT; gene += 1) this.nextGenes[targetOffset + gene] = this.genes[sourceOffset + gene];
+          return mutate ? this.mutateGenes(sourceOffset, targetOffset) : 0;
+        }
+
+        averageNeighborGenes(index, type, targetOffset) {
+          const sums = this.geneSumsScratch;
+          sums.fill(0);
+          let count = 0;
+          let lineage = 0;
+          for (let slot = 0; slot < 8; slot += 1) {
+            const neighbor = this.neighbors[index * 8 + slot];
+            if (neighbor < 0 || this.life[neighbor] !== type) continue;
+            const offset = neighbor * GENE_COUNT;
+            for (let gene = 0; gene < GENE_COUNT; gene += 1) sums[gene] += this.genes[offset + gene];
+            if (count === 0) lineage = this.lineage[neighbor];
+            count += 1;
+          }
+          if (count === 0) return false;
+          for (let gene = 0; gene < GENE_COUNT; gene += 1) this.nextGenes[targetOffset + gene] = sums[gene] / count;
+          this.nextLineage[targetOffset / GENE_COUNT] = lineage;
+          this.mutateGenes(targetOffset, targetOffset, this.nextGenes, this.nextGenes);
+          return true;
+        }
+
+        claim(index, type, energy, age, cooldown, infection, lineage, priority) {
+          if (index < 0 || this.terrain[index] !== TERRAIN.SOIL) return false;
+          const owner = this.claimed[index];
+          if (owner !== -1 && this.claimPriority[index] >= priority) return false;
+          this.claimed[index] = index;
+          this.claimPriority[index] = priority;
+          this.nextLife[index] = type;
+          this.nextEnergy[index] = energy;
+          this.nextAge[index] = Math.min(65535, age);
+          this.nextCooldown[index] = Math.min(255, cooldown);
+          this.nextInfection[index] = infection;
+          this.nextLineage[index] = lineage;
+          return true;
+        }
+
+        clearClaim(index) {
+          if (index < 0) return;
+          this.nextLife[index] = TYPE.EMPTY;
+          this.nextEnergy[index] = 0;
+          this.nextAge[index] = 0;
+          this.nextCooldown[index] = 0;
+          this.nextInfection[index] = 0;
+          this.nextLineage[index] = 0;
+          this.claimed[index] = -1;
+          this.claimPriority[index] = 0;
+        }
+
+        countNeighbors(index) {
+          this.counts.fill(0);
+          for (let slot = 0; slot < 8; slot += 1) {
+            const neighbor = this.neighbors[index * 8 + slot];
+            if (neighbor >= 0) this.counts[this.life[neighbor]] += 1;
+          }
+          return this.counts;
+        }
+
+        chooseFood(index, typeA, typeB = -1) {
+          let best = -1;
+          let bestScore = -Infinity;
+          for (let slot = 0; slot < 8; slot += 1) {
+            const neighbor = this.neighbors[index * 8 + slot];
+            if (neighbor < 0 || this.eaten[neighbor]) continue;
+            const type = this.life[neighbor];
+            if (type !== typeA && type !== typeB) continue;
+            const defense = this.genes[neighbor * GENE_COUNT + 4];
+            const score = this.energy[neighbor] * 0.2 + (1 - defense) + this.rng() * 0.08;
+            if (score > bestScore) {
+              bestScore = score;
+              best = neighbor;
+            }
+          }
+          return best;
+        }
+
+        chooseEmpty(index) {
+          let best = -1;
+          let bestScore = -Infinity;
+          for (let slot = 0; slot < 8; slot += 1) {
+            const neighbor = this.neighbors[index * 8 + slot];
+            if (neighbor < 0 || this.terrain[neighbor] !== TERRAIN.SOIL || this.life[neighbor] !== TYPE.EMPTY || this.claimed[neighbor] !== -1) continue;
+            const score = this.nutrients[neighbor] + this.moisture[neighbor] * 0.35 + this.rng() * 0.12;
+            if (score > bestScore) {
+              bestScore = score;
+              best = neighbor;
+            }
+          }
+          return best;
+        }
+
+        chooseForageTarget(index, typeA, typeB = -1) {
+          let best = -1;
+          let bestScore = -Infinity;
+          for (let slot = 0; slot < 8; slot += 1) {
+            const target = this.neighbors[index * 8 + slot];
+            if (target < 0 || this.terrain[target] !== TERRAIN.SOIL || this.life[target] !== TYPE.EMPTY || this.claimed[target] !== -1) continue;
+            let food = 0;
+            for (let inner = 0; inner < 8; inner += 1) {
+              const neighbor = this.neighbors[target * 8 + inner];
+              if (neighbor < 0) continue;
+              const neighborType = this.life[neighbor];
+              if (neighborType === typeA || neighborType === typeB) food += 1;
+            }
+            const score = food * 2 + this.moisture[target] * 0.2 + this.nutrients[target] * 0.15 + this.rng() * 0.1;
+            if (score > bestScore) {
+              bestScore = score;
+              best = target;
+            }
+          }
+          return best;
+        }
+
+        markEaten(index) {
+          this.eaten[index] = 1;
+          this.nextDetritus[index] = clamp(this.nextDetritus[index] + 0.16 + this.energy[index] * 0.12, 0, 1.5);
+          this.clearClaim(index);
+        }
+
+        updateClimate() {
+          const phase = (this.time % YEAR_SECONDS) / YEAR_SECONDS;
+          const scaled = phase * 4;
+          const index = Math.floor(scaled) % 4;
+          const local = scaled - Math.floor(scaled);
+          const current = SEASONS[index];
+          const next = SEASONS[(index + 1) % 4];
+          const blend = local * local * (3 - 2 * local);
+          this.globalTemperature = lerp(current.temperature, next.temperature, blend);
+          this.globalLight = lerp(current.light, next.light, blend);
+          this.globalRain = lerp(current.rain, next.rain, blend);
+          this.seasonPhase = phase;
+          this.seasonIndex = index;
+          this.year = Math.floor(this.time / YEAR_SECONDS) + 1;
+
+          for (let i = 0; i < CELL_COUNT; i += 1) {
+            const terrain = this.terrain[i];
+            const terrainOffset = terrain === TERRAIN.WATER ? -0.1 : terrain === TERRAIN.ROCK ? 0.08 : (this.elevation[i] - 0.5) * 0.16;
+            this.nextTemperature[i] = clamp(this.globalTemperature + terrainOffset, 0, 1);
+            let waterNeighbors = 0;
+            for (let slot = 0; slot < 8; slot += 1) {
+              const neighbor = this.neighbors[i * 8 + slot];
+              if (neighbor >= 0 && this.terrain[neighbor] === TERRAIN.WATER) waterNeighbors += 1;
+            }
+            const evaporation = 0.0012 + this.globalLight * 0.0018 + (terrain === TERRAIN.ROCK ? 0.003 : 0);
+            this.nextMoisture[i] = clamp(this.moisture[i] * 0.998 + this.globalRain * 0.0075 - evaporation + waterNeighbors * 0.002, 0, 1);
+            this.nextNutrients[i] = this.nutrients[i] * 0.9985;
+            this.nextDetritus[i] = this.detritus[i] * 0.992;
+            this.nextSpores[i] = this.spores[i] * 0.9994;
+            this.nextSporeType[i] = this.sporeType[i];
+          }
+        }
+
+        step() {
+          const previousSeason = this.seasonIndex;
+          this.tick += 1;
+          this.time = this.tick * STEP_SECONDS;
+          this.updateClimate();
+          if (this.seasonIndex !== previousSeason) this.log(`Наступила ${SEASONS[this.seasonIndex].name.toLowerCase()}. Условия отбора изменились.`);
+
+          this.nextLife.fill(0);
+          this.nextEnergy.fill(0);
+          this.nextAge.fill(0);
+          this.nextCooldown.fill(0);
+          this.nextLineage.fill(0);
+          this.nextInfection.fill(0);
+          this.claimed.fill(-1);
+          this.claimPriority.fill(0);
+          this.eaten.fill(0);
+
+          const stride = 7919;
+          this.orderOffset = (this.orderOffset + stride) % CELL_COUNT;
+
+          for (let order = 0; order < CELL_COUNT; order += 1) {
+            const index = (order + this.orderOffset) % CELL_COUNT;
+            if (this.terrain[index] !== TERRAIN.SOIL) continue;
+            const type = this.life[index];
+            const counts = this.countNeighbors(index);
+
+            if (type === TYPE.EMPTY) {
+              if (counts[TYPE.PRODUCER] === 3 && this.moisture[index] > 0.16 && this.nutrients[index] > 0.06) {
+                const offset = index * GENE_COUNT;
+                if (this.averageNeighborGenes(index, TYPE.PRODUCER, offset)) {
+                  this.claim(index, TYPE.PRODUCER, 0.62, 0, 6, 0, this.nextLineage[index], 0.5);
+                }
+              } else if (this.sporeType[index] === TYPE.PRODUCER && this.spores[index] > 0.12 && this.moisture[index] > 0.22 && this.nutrients[index] > 0.1 && this.rng() < 0.012 * this.spores[index] * this.moisture[index] * this.nutrients[index]) {
+                const offset = index * GENE_COUNT;
+                const genome = this.randomGenome(TYPE.PRODUCER);
+                for (let gene = 0; gene < GENE_COUNT; gene += 1) this.nextGenes[offset + gene] = genome[gene];
+                this.mutateGenes(offset, offset, this.nextGenes, this.nextGenes);
+                this.nextLineage[index] = this.nextLineageId++;
+                this.nextSpores[index] *= 0.25;
+                this.claim(index, TYPE.PRODUCER, 0.58, 0, 8, 0, this.nextLineage[index], 0.45);
+                for (let slot = 0; slot < 8; slot += 1) {
+                  const neighbor = this.neighbors[index * 8 + slot];
+                  if (neighbor < 0 || this.terrain[neighbor] !== TERRAIN.SOIL || this.life[neighbor] !== TYPE.EMPTY || this.claimed[neighbor] !== -1 || this.rng() > 0.72) continue;
+                  const neighborOffset = neighbor * GENE_COUNT;
+                  for (let gene = 0; gene < GENE_COUNT; gene += 1) this.nextGenes[neighborOffset + gene] = this.nextGenes[offset + gene];
+                  this.claim(neighbor, TYPE.PRODUCER, 0.52, 0, 8, 0, this.nextLineage[index], 0.44);
+                }
+              } else if (this.sporeType[index] === TYPE.PARASITE && this.spores[index] > 0.15 && this.rng() < 0.004 * this.spores[index]) {
+                const offset = index * GENE_COUNT;
+                const genome = this.randomGenome(TYPE.PARASITE);
+                for (let gene = 0; gene < GENE_COUNT; gene += 1) this.nextGenes[offset + gene] = genome[gene];
+                this.mutateGenes(offset, offset, this.nextGenes, this.nextGenes);
+                this.nextLineage[index] = this.nextLineageId++;
+                this.nextSpores[index] *= 0.3;
+                this.claim(index, TYPE.PARASITE, 0.62, 0, 8, 0, this.nextLineage[index], 0.42);
+              } else if (counts[TYPE.DECOMPOSER] === 3 && this.detritus[index] > 0.08) {
+                const offset = index * GENE_COUNT;
+                if (this.averageNeighborGenes(index, TYPE.DECOMPOSER, offset)) {
+                  this.claim(index, TYPE.DECOMPOSER, 0.58, 0, 6, 0, this.nextLineage[index], 0.5);
+                }
+              }
+              continue;
+            }
+            if (this.eaten[index]) continue;
+
+            const offset = index * GENE_COUNT;
+            const metabolism = this.genes[offset];
+            const fertility = this.genes[offset + 1];
+            const mobility = this.genes[offset + 2];
+            const attack = this.genes[offset + 3];
+            const defense = this.genes[offset + 4];
+            const climateFit = this.genes[offset + 5];
+            const temperature = this.temperature[index];
+            const moisture = this.moisture[index];
+            const nutrients = this.nutrients[index];
+            const optimalTemperature = 0.22 + climateFit * 0.62;
+            const temperatureStress = Math.abs(temperature - optimalTemperature);
+            let energy = this.energy[index];
+            let infection = this.infection[index];
+            let ate = false;
+
+            if (type === TYPE.PRODUCER) {
+              const lightFactor = this.globalLight * (0.45 + moisture * 0.75);
+              const soilFactor = 0.35 + nutrients * 0.9;
+              const climateFactor = clamp(1 - temperatureStress * 1.45, 0.08, 1);
+              energy += 0.021 * lightFactor * soilFactor * climateFactor + 0.0025 - metabolism * 0.0045;
+              this.nextNutrients[index] = Math.max(0, this.nextNutrients[index] - 0.0014 * metabolism);
+            } else if (type === TYPE.CONSUMER) {
+              const food = this.rng() < 0.38 ? this.chooseFood(index, TYPE.PRODUCER) : -1;
+              if (food >= 0) {
+                const foodDefense = this.genes[food * GENE_COUNT + 4];
+                energy += (0.12 + this.energy[food] * 0.08) * (1 - foodDefense * 0.5);
+                this.markEaten(food);
+                ate = true;
+              }
+              energy -= metabolism * 0.011 + (ate ? 0 : 0.006);
+            } else if (type === TYPE.PREDATOR) {
+              const food = this.rng() < 0.55 ? this.chooseFood(index, TYPE.CONSUMER, TYPE.PARASITE) : -1;
+              if (food >= 0) {
+                const foodDefense = this.genes[food * GENE_COUNT + 4];
+                energy += (0.08 + attack * 0.26) * (1 - foodDefense * 0.6);
+                this.markEaten(food);
+                ate = true;
+              }
+              energy -= metabolism * 0.014 + (ate ? 0 : 0.006);
+            } else if (type === TYPE.PARASITE) {
+              let hosts = 0;
+              for (let slot = 0; slot < 8; slot += 1) {
+                const neighbor = this.neighbors[index * 8 + slot];
+                if (neighbor < 0 || this.life[neighbor] < TYPE.PRODUCER || this.life[neighbor] > TYPE.PREDATOR) continue;
+                const hostDefense = this.genes[neighbor * GENE_COUNT + 4];
+                const pressure = 0.024 * fertility * (1 - hostDefense * 0.55);
+                this.nextInfection[neighbor] = clamp(this.nextInfection[neighbor] + pressure, 0, 1.6);
+                energy += pressure * 0.4;
+                hosts += 1;
+              }
+              energy -= metabolism * 0.0065 + (hosts === 0 ? 0.006 : 0);
+            } else if (type === TYPE.DECOMPOSER) {
+              let available = this.detritus[index];
+              for (let slot = 0; slot < 8; slot += 1) {
+                const neighbor = this.neighbors[index * 8 + slot];
+                if (neighbor >= 0) available += this.detritus[neighbor] * 0.25;
+              }
+              const consumed = Math.min(available, metabolism * 0.022);
+              this.nextDetritus[index] = Math.max(0, this.nextDetritus[index] - consumed);
+              this.nextNutrients[index] = clamp(this.nextNutrients[index] + consumed * 0.38, 0, 1.2);
+              energy += consumed * 0.82 - metabolism * 0.0045;
+            }
+
+            if (infection > 0) {
+              energy -= infection * (0.014 + metabolism * 0.008);
+              infection *= 0.997;
+            }
+            energy -= temperatureStress * 0.008 * metabolism;
+            const age = this.age[index] + 1;
+            if (age > 210) energy -= (age - 210) * 0.00016;
+            const cooldown = Math.max(0, this.cooldown[index] - 1);
+
+            let survives = true;
+            if (type === TYPE.PRODUCER) survives = counts[TYPE.PRODUCER] === 2 || counts[TYPE.PRODUCER] === 3;
+            else if (type === TYPE.CONSUMER) survives = energy > 0.12 && (ate || (energy > 0.42 && counts[TYPE.CONSUMER] <= 3));
+            else if (type === TYPE.PREDATOR) survives = energy > 0.16 && (ate || (energy > 0.55 && counts[TYPE.PREDATOR] <= 1));
+            else if (type === TYPE.PARASITE) survives = energy > 0.08 && counts[TYPE.PARASITE] <= 4;
+            else if (type === TYPE.DECOMPOSER) survives = energy > 0.1 && counts[TYPE.DECOMPOSER] <= 2 && (this.detritus[index] > 0.015 || energy > 0.16 || counts[TYPE.DECOMPOSER] >= 2);
+
+            const maxAge = 260 + fertility * 120;
+            if (!survives || energy <= 0 || infection > 1.45 || age > maxAge) {
+              this.nextDetritus[index] = clamp(this.nextDetritus[index] + 0.12 + Math.max(0, energy) * 0.18, 0, 1.5);
+              if (type === TYPE.PRODUCER || type === TYPE.PARASITE) {
+                this.nextSpores[index] = clamp(this.nextSpores[index] + 0.32 + Math.max(0, energy) * 0.08, 0, 1.5);
+                this.nextSporeType[index] = type;
+              }
+              continue;
+            }
+            energy = Math.min(energy, 2.2);
+
+            const threshold = 1.08 + (1.25 - fertility) * 0.22 + (type === TYPE.CONSUMER || type === TYPE.PREDATOR ? 0.16 : 0);
+            const environmentFactor = type === TYPE.PRODUCER ? clamp(moisture * nutrients * 2, 0.15, 1) : type === TYPE.DECOMPOSER ? clamp(this.detritus[index] * 4, 0.1, 1) : 0.8;
+            let reproduced = false;
+            if (cooldown === 0 && energy > threshold && (ate || type === TYPE.PRODUCER || type === TYPE.PARASITE || type === TYPE.DECOMPOSER) && this.rng() < REPRODUCTION_CHANCE[type] * fertility * environmentFactor) {
+              const target = this.chooseEmpty(index);
+              if (target >= 0) {
+                const targetOffset = target * GENE_COUNT;
+                this.inheritGenes(offset, targetOffset, true);
+                const childEnergy = energy * 0.42;
+                this.claim(target, type, childEnergy, 0, 8, 0, this.lineage[index], energy + 1);
+                energy -= childEnergy + 0.08;
+                reproduced = true;
+              }
+            }
+
+            let targetIndex = index;
+            if (!reproduced && (type === TYPE.CONSUMER || type === TYPE.PREDATOR) && !ate && mobility > 0.3 && energy < 0.95 && this.claimed[index] === -1 && this.rng() < mobility * 0.16) {
+              const target = type === TYPE.CONSUMER ? this.chooseForageTarget(index, TYPE.PRODUCER) : this.chooseForageTarget(index, TYPE.CONSUMER, TYPE.PARASITE);
+              if (target >= 0) {
+                targetIndex = target;
+                energy -= 0.035;
+              }
+            }
+
+            const priority = energy + age * 0.0005;
+            if (!this.claim(targetIndex, type, energy, age, reproduced ? 10 : cooldown, infection, this.lineage[index], priority) && targetIndex !== index) {
+              this.claim(index, type, energy, age, cooldown, infection, this.lineage[index], priority);
+            }
+          }
+
+          this.swapBuffers();
+          if (this.tick % 12 === 0) {
+            this.updateStats();
+            this.recordHistory();
+            if (this.tick % 60 === 0) this.maybeImmigrate();
+          }
+          this.revision += 1;
+          return this.stats;
+        }
+
+        maybeImmigrate() {
+          const populations = this.stats.populations;
+          if (populations[TYPE.CONSUMER] < 25 && populations[TYPE.PRODUCER] > 250) {
+            this.seedNear(TYPE.CONSUMER, TYPE.PRODUCER, 5);
+            this.log("С края листа занесены консументы. Пищевая цепь восстановилась.");
+          }
+          if (populations[TYPE.PREDATOR] < 3 && populations[TYPE.CONSUMER] > 35) {
+            this.seedNear(TYPE.PREDATOR, TYPE.CONSUMER, 5);
+            this.log("Хищник пересек край листа. Появился новый контроль популяции.");
+          }
+          if (populations[TYPE.PARASITE] < 2 && this.stats.total > 250) {
+            this.seedNear(TYPE.PARASITE, TYPE.PRODUCER, 3);
+            this.log("Ветер принёс споры паразита из соседнего кодекса.");
+          }
+          this.updateStats();
+        }
+
+        swapBuffers() {
+          [this.life, this.nextLife] = [this.nextLife, this.life];
+          [this.energy, this.nextEnergy] = [this.nextEnergy, this.energy];
+          [this.age, this.nextAge] = [this.nextAge, this.age];
+          [this.cooldown, this.nextCooldown] = [this.nextCooldown, this.cooldown];
+          [this.genes, this.nextGenes] = [this.nextGenes, this.genes];
+          [this.lineage, this.nextLineage] = [this.nextLineage, this.lineage];
+          [this.infection, this.nextInfection] = [this.nextInfection, this.infection];
+          [this.moisture, this.nextMoisture] = [this.nextMoisture, this.moisture];
+          [this.nutrients, this.nextNutrients] = [this.nextNutrients, this.nutrients];
+          [this.temperature, this.nextTemperature] = [this.nextTemperature, this.temperature];
+          [this.detritus, this.nextDetritus] = [this.nextDetritus, this.detritus];
+          [this.spores, this.nextSpores] = [this.nextSpores, this.spores];
+          [this.sporeType, this.nextSporeType] = [this.nextSporeType, this.sporeType];
+        }
+
+        updateStats() {
+          const populations = new Uint32Array(6);
+          const geneSums = new Float64Array(6 * GENE_COUNT);
+          const lineages = new Set();
+          let infectionTotal = 0;
+          let moistureTotal = 0;
+          let nutrientTotal = 0;
+          let temperatureTotal = 0;
+          let soilCells = 0;
+          for (let i = 0; i < CELL_COUNT; i += 1) {
+            const type = this.life[i];
+            if (type !== TYPE.EMPTY) {
+              populations[type] += 1;
+              lineages.add(this.lineage[i]);
+              const offset = i * GENE_COUNT;
+              for (let gene = 0; gene < GENE_COUNT; gene += 1) geneSums[type * GENE_COUNT + gene] += this.genes[offset + gene];
+              infectionTotal += this.infection[i];
+            }
+            if (this.terrain[i] === TERRAIN.SOIL) {
+              moistureTotal += this.moisture[i];
+              nutrientTotal += this.nutrients[i];
+              temperatureTotal += this.temperature[i];
+              soilCells += 1;
+            }
+          }
+          let diversity = 0;
+          let total = 0;
+          for (let type = 1; type <= 5; type += 1) total += populations[type];
+          if (total > 0) {
+            for (let type = 1; type <= 5; type += 1) {
+              const share = populations[type] / total;
+              if (share > 0) diversity -= share * Math.log(share);
+            }
+          }
+          const traits = Array.from({ length: 6 }, () => new Float64Array(GENE_COUNT));
+          for (let type = 1; type <= 5; type += 1) {
+            for (let gene = 0; gene < GENE_COUNT; gene += 1) {
+              traits[type][gene] = populations[type] > 0 ? geneSums[type * GENE_COUNT + gene] / populations[type] : 0;
+            }
+          }
+          this.stats = {
+            populations: Array.from(populations),
+            total,
+            diversity,
+            lineages: lineages.size,
+            mutations: this.totalMutations,
+            infectionTotal,
+            traits,
+            meanTemperature: soilCells ? temperatureTotal / soilCells : 0,
+            meanMoisture: soilCells ? moistureTotal / soilCells : 0,
+            meanNutrients: soilCells ? nutrientTotal / soilCells : 0
+          };
+
+          if (this.history.length > 0) {
+            const previous = this.history[this.history.length - 1].populations;
+            const before = previous.reduce((sum, value) => sum + value, 0);
+            if (before > 120 && total < before * 0.68) this.log("Резкое падение популяции. Отбор усилился.");
+          }
+        }
+
+        recordHistory() {
+          this.history.push({
+            tick: this.tick,
+            year: this.year,
+            season: this.seasonIndex,
+            populations: this.stats.populations.slice()
+          });
+          if (this.history.length > this.historyLimit) this.history.shift();
+        }
+
+        log(message) {
+          this.events.unshift({ tick: this.tick, year: this.year, season: SEASONS[this.seasonIndex].name, message });
+          if (this.events.length > 24) this.events.pop();
+        }
+
+        paint(x, y, brush, radius = 3) {
+          const cx = clamp(Math.floor(x), 0, GRID_WIDTH - 1);
+          const cy = clamp(Math.floor(y), 0, GRID_HEIGHT - 1);
+          for (let dy = -radius; dy <= radius; dy += 1) {
+            for (let dx = -radius; dx <= radius; dx += 1) {
+              if (dx * dx + dy * dy > radius * radius) continue;
+              const px = cx + dx;
+              const py = cy + dy;
+              if (px < 0 || px >= GRID_WIDTH || py < 0 || py >= GRID_HEIGHT) continue;
+              const index = py * GRID_WIDTH + px;
+              if (brush === "water") {
+                this.terrain[index] = TERRAIN.WATER;
+                this.life[index] = TYPE.EMPTY;
+                this.energy[index] = 0;
+                this.infection[index] = 0;
+                this.moisture[index] = 0.95;
+                this.nutrients[index] = Math.max(this.nutrients[index], 0.35);
+                this.terrainDirty = true;
+              } else if (brush === "rock") {
+                this.terrain[index] = TERRAIN.ROCK;
+                this.life[index] = TYPE.EMPTY;
+                this.energy[index] = 0;
+                this.infection[index] = 0;
+                this.moisture[index] = 0.12;
+                this.nutrients[index] = 0.04;
+                this.terrainDirty = true;
+              } else if (brush === "nutrient") {
+                this.nutrients[index] = clamp(this.nutrients[index] + 0.28, 0, 1.2);
+              } else if (brush === "erase") {
+                this.life[index] = TYPE.EMPTY;
+                this.energy[index] = 0;
+                this.age[index] = 0;
+                this.infection[index] = 0;
+                this.detritus[index] = Math.min(1.2, this.detritus[index] + 0.08);
+              } else {
+                const type = Number(brush);
+                if (type >= TYPE.PRODUCER && type <= TYPE.DECOMPOSER) {
+                  this.terrain[index] = TERRAIN.SOIL;
+                  this.seedOrganism(index, type);
+                  this.moisture[index] = Math.max(this.moisture[index], 0.3);
+                  this.nutrients[index] = Math.max(this.nutrients[index], 0.18);
+                  this.terrainDirty = true;
+                }
+              }
+            }
+          }
+          this.updateStats();
+          this.revision += 1;
+        }
+
+        disturb(kind) {
+          if (kind === "rain") {
+            for (let i = 0; i < CELL_COUNT; i += 1) if (this.terrain[i] !== TERRAIN.ROCK) this.moisture[i] = clamp(this.moisture[i] + 0.18, 0, 1);
+            this.log("Прошёл дождь. Влажность почвы выросла.");
+          } else if (kind === "drought") {
+            for (let i = 0; i < CELL_COUNT; i += 1) if (this.terrain[i] === TERRAIN.SOIL) this.moisture[i] = clamp(this.moisture[i] - 0.24, 0.02, 1);
+            this.log("Началась засуха. Продуценты испытывают водный стресс.");
+          } else if (kind === "fertilize") {
+            for (let i = 0; i < CELL_COUNT; i += 1) if (this.terrain[i] === TERRAIN.SOIL) this.nutrients[i] = clamp(this.nutrients[i] + 0.16, 0, 1.2);
+            this.log("Почву удобрили. Доступное питание выросло.");
+          }
+          this.updateStats();
+          this.revision += 1;
+        }
+
+        writeStateData() {
+          for (let i = 0; i < CELL_COUNT; i += 1) {
+            const offset = i * 4;
+            this.stateData[offset] = this.life[i] * 42;
+            this.stateData[offset + 1] = Math.round(clamp(this.energy[i] / 2.2, 0, 1) * 255);
+            this.stateData[offset + 2] = Math.round(clamp(this.age[i] / 420, 0, 1) * 255);
+            const lineage = this.lineage[i] || 0;
+            this.stateData[offset + 3] = (Math.imul(lineage, 2654435761) >>> 24) & 255;
+          }
+        }
+
+        writeClimateData() {
+          for (let i = 0; i < CELL_COUNT; i += 1) {
+            const offset = i * 4;
+            this.climateData[offset] = Math.round(clamp(this.temperature[i], 0, 1) * 255);
+            this.climateData[offset + 1] = Math.round(clamp(this.moisture[i], 0, 1) * 255);
+            this.climateData[offset + 2] = Math.round(clamp(this.nutrients[i], 0, 1) * 255);
+            this.climateData[offset + 3] = Math.round(clamp(this.detritus[i], 0, 1) * 255);
+          }
+        }
+
+        writeTerrainData() {
+          for (let i = 0; i < CELL_COUNT; i += 1) {
+            const offset = i * 4;
+            this.terrainData[offset] = this.terrain[i] * 100;
+            this.terrainData[offset + 1] = Math.round(this.elevation[i] * 255);
+            this.terrainData[offset + 2] = Math.round(this.moisture[i] * 255);
+            this.terrainData[offset + 3] = 255;
+          }
+          this.terrainDirty = false;
+        }
+      }
+
+      function getWorldLayout(width, height) {
+        const rotated = width / height < 0.95;
+        const gridWidth = rotated ? GRID_HEIGHT : GRID_WIDTH;
+        const gridHeight = rotated ? GRID_WIDTH : GRID_HEIGHT;
+        const scale = Math.min(width / gridWidth, height / gridHeight);
+        const worldWidth = gridWidth * scale;
+        const worldHeight = gridHeight * scale;
+        return {
+          x: (width - worldWidth) / 2,
+          y: (height - worldHeight) / 2,
+          width: worldWidth,
+          height: worldHeight,
+          scale,
+          rotated,
+          gridWidth,
+          gridHeight
+        };
+      }
+
+      function screenToGrid(layout, localX, localY) {
+        if (localX < layout.x || localX > layout.x + layout.width || localY < layout.y || localY > layout.y + layout.height) return null;
+        const nx = (localX - layout.x) / layout.width;
+        const ny = (localY - layout.y) / layout.height;
+        if (layout.rotated) return { x: (1 - ny) * (GRID_WIDTH - 1), y: nx * (GRID_HEIGHT - 1) };
+        return { x: nx * (GRID_WIDTH - 1), y: ny * (GRID_HEIGHT - 1) };
+      }
+
+      const VERTEX_SHADER = `#version 300 es
+        in vec2 a_position;
+        out vec2 v_uv;
+        void main() {
+          v_uv = a_position * 0.5 + 0.5;
+          gl_Position = vec4(a_position, 0.0, 1.0);
+        }
+      `;
+
+      const FRAGMENT_SHADER = `#version 300 es
+        precision highp float;
+        in vec2 v_uv;
+        out vec4 outColor;
+        uniform sampler2D u_state;
+        uniform sampler2D u_climate;
+        uniform sampler2D u_terrain;
+        uniform sampler2D u_paper;
+        uniform vec2 u_resolution;
+        uniform vec4 u_worldRect;
+        uniform vec2 u_grid;
+        uniform float u_time;
+        uniform float u_season;
+        uniform float u_showClimate;
+        uniform float u_rotated;
+
+        float hash21(vec2 p) {
+          p = fract(p * vec2(123.34, 456.21));
+          p += dot(p, p + 45.32);
+          return fract(p.x * p.y);
+        }
+        float noise(vec2 p) {
+          vec2 i = floor(p);
+          vec2 f = fract(p);
+          f = f * f * (3.0 - 2.0 * f);
+          return mix(mix(hash21(i), hash21(i + vec2(1,0)), f.x), mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x), f.y);
+        }
+        float fbm(vec2 p) {
+          float v = 0.0;
+          float a = 0.5;
+          for (int i = 0; i < 4; i++) {
+            v += a * noise(p);
+            p = p * 2.03 + 13.1;
+            a *= 0.5;
+          }
+          return v;
+        }
+        mat2 rot(float a) { return mat2(cos(a), -sin(a), sin(a), cos(a)); }
+        float ellipse(vec2 p, vec2 r) { return length(p / r) - 1.0; }
+
+        void main() {
+          vec2 screen = v_uv * u_resolution;
+          vec2 world = (screen - u_worldRect.xy) / u_worldRect.zw;
+          float inside = step(0.0, world.x) * step(0.0, world.y) * step(world.x, 1.0) * step(world.y, 1.0);
+          vec2 uv = clamp(world, 0.0, 1.0);
+          if (u_rotated > 0.5) uv = vec2(1.0 - uv.y, uv.x);
+          vec3 paper = texture(u_paper, v_uv * u_resolution / 512.0).rgb;
+          float seasonTint = u_season;
+          vec3 seasonColor = mix(vec3(0.96,0.91,0.78), vec3(0.88,0.92,0.91), smoothstep(0.7,1.0,seasonTint));
+          paper = mix(paper, paper * seasonColor, 0.22);
+
+          vec2 gridPos = uv * u_grid;
+          vec2 cell = floor(gridPos);
+          vec2 local = fract(gridPos) - 0.5;
+          ivec2 texel = ivec2(clamp(cell, vec2(0), u_grid - 1.0));
+          vec4 state = texelFetch(u_state, texel, 0);
+          vec4 climate = texelFetch(u_climate, texel, 0);
+          vec4 terrain = texelFetch(u_terrain, texel, 0);
+          float type = floor(state.r * 255.0 / 42.0 + 0.5);
+          float terrainType = floor(terrain.r * 255.0 / 100.0 + 0.5);
+          float cellHash = hash21(cell + 4.7);
+          float secondHash = hash21(cell * 1.73 + 9.1);
+          local += vec2(cellHash - 0.5, secondHash - 0.5) * 0.08;
+          local = rot(cellHash * 6.28318) * local;
+          float wobble = (noise(cell * 0.7 + u_time * 0.03) - 0.5) * 0.06;
+          float shape = 10.0;
+          float accent = 0.0;
+
+          if (terrainType > 1.5) {
+            float wash = noise(cell * 0.045);
+            paper = mix(paper, vec3(0.56,0.66,0.65) + wash * 0.08, 0.48 * inside);
+          } else if (terrainType > 0.5) {
+            float stone = noise(cell * 0.8);
+            paper = mix(paper, vec3(0.55,0.53,0.46) + stone * 0.12, 0.42 * inside);
+          } else {
+            float soil = noise(cell * 0.06);
+            paper = mix(paper, vec3(0.78,0.71,0.56) + soil * 0.08, 0.16 * inside);
+          }
+
+          if (type > 0.5 && type < 1.5) {
+            shape = ellipse(local, vec2(0.26 + wobble, 0.23 + wobble));
+            accent = smoothstep(0.12, -0.08, length(local - vec2(0.12, -0.08)));
+          } else if (type < 2.5) {
+            shape = ellipse(local, vec2(0.34 + wobble, 0.19 + wobble));
+            accent = smoothstep(0.08, -0.05, length(local - vec2(-0.16, 0.02)));
+          } else if (type < 3.5) {
+            shape = abs(local.x) * 0.85 + abs(local.y) - 0.27 - wobble;
+            accent = smoothstep(0.12, -0.04, length(local));
+          } else if (type < 4.5) {
+            shape = ellipse(local, vec2(0.12, 0.28 + wobble));
+            accent = smoothstep(0.08, -0.05, length(local - vec2(0.1, -0.08)));
+          } else if (type < 5.5) {
+            float a = ellipse(local - vec2(-0.12, 0.03), vec2(0.12, 0.1));
+            float b = ellipse(local - vec2(0.1, -0.07), vec2(0.1, 0.12));
+            float c = ellipse(local - vec2(0.03, 0.15), vec2(0.08, 0.08));
+            shape = min(min(a,b),c) + wobble * 0.4;
+            accent = 0.4;
+          }
+
+          float mask = 1.0 - smoothstep(-0.035, 0.045, shape);
+          mask *= inside;
+          vec3 ink = vec3(0.16, 0.22, 0.17);
+          vec3 color = ink;
+          if (type < 1.5) color = mix(vec3(0.29,0.39,0.26), vec3(0.45,0.55,0.34), state.a);
+          else if (type < 2.5) color = mix(vec3(0.61,0.46,0.24), vec3(0.74,0.58,0.31), state.a);
+          else if (type < 3.5) color = mix(vec3(0.50,0.22,0.16), vec3(0.66,0.31,0.22), state.a);
+          else if (type < 4.5) color = mix(vec3(0.36,0.20,0.30), vec3(0.52,0.30,0.39), state.a);
+          else color = mix(vec3(0.48,0.43,0.32), vec3(0.66,0.59,0.43), state.a);
+          color *= 0.86 + state.g * 0.25;
+          color = mix(color, color * vec3(1.06,0.98,0.88), accent * 0.35);
+          float outline = smoothstep(-0.01, 0.065, shape) - smoothstep(0.045, 0.09, shape);
+          paper = mix(paper, color, mask * 0.88);
+          paper = mix(paper, ink, outline * inside * 0.32);
+
+          if (u_showClimate > 0.5) {
+            vec3 climateInk = mix(vec3(0.36,0.55,0.58), vec3(0.72,0.34,0.24), climate.r);
+            climateInk = mix(climateInk, vec3(0.31,0.43,0.27), climate.g * 0.35);
+            paper = mix(paper, climateInk, inside * 0.22);
+          }
+
+          float ledger = step(0.985, fract(gridPos.x)) + step(0.985, fract(gridPos.y));
+          paper = mix(paper, vec3(0.32,0.35,0.29), ledger * inside * 0.045);
+          float edgeShade = smoothstep(0.0, 0.08, min(min(world.x, 1.0-world.x), min(world.y, 1.0-world.y)));
+          paper *= mix(0.91, 1.0, edgeShade * inside + (1.0-inside));
+          outColor = vec4(paper, 1.0);
+        }
+      `;
+
+      function compileShader(gl, type, source) {
+        const shader = gl.createShader(type);
+        gl.shaderSource(shader, source);
+        gl.compileShader(shader);
+        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+          const message = gl.getShaderInfoLog(shader);
+          gl.deleteShader(shader);
+          throw new Error(message || "Shader compile error");
+        }
+        return shader;
+      }
+
+      class WebGLRenderer {
+        constructor(canvas, gl) {
+          this.canvas = canvas;
+          this.gl = gl;
+          this.label = "WebGL2 · бумага и акварель";
+          const vertex = compileShader(gl, gl.VERTEX_SHADER, VERTEX_SHADER);
+          const fragment = compileShader(gl, gl.FRAGMENT_SHADER, FRAGMENT_SHADER);
+          this.program = gl.createProgram();
+          gl.attachShader(this.program, vertex);
+          gl.attachShader(this.program, fragment);
+          gl.linkProgram(this.program);
+          gl.deleteShader(vertex);
+          gl.deleteShader(fragment);
+          if (!gl.getProgramParameter(this.program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(this.program) || "Program link error");
+          gl.useProgram(this.program);
+          const buffer = gl.createBuffer();
+          gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+          gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+          const position = gl.getAttribLocation(this.program, "a_position");
+          gl.enableVertexAttribArray(position);
+          gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
+          this.uniforms = {};
+          for (const name of ["u_state", "u_climate", "u_terrain", "u_paper", "u_resolution", "u_worldRect", "u_grid", "u_time", "u_season", "u_showClimate", "u_rotated"]) {
+            this.uniforms[name] = gl.getUniformLocation(this.program, name);
+          }
+          this.textures = [this.createTexture(), this.createTexture(), this.createTexture(), this.createPaperTexture()];
+          this.terrainUploaded = false;
+          this.lastEcology = null;
+          this.lastRevision = -1;
+        }
+
+        createTexture(repeat = false) {
+          const gl = this.gl;
+          const texture = gl.createTexture();
+          gl.bindTexture(gl.TEXTURE_2D, texture);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, repeat ? gl.REPEAT : gl.CLAMP_TO_EDGE);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, repeat ? gl.REPEAT : gl.CLAMP_TO_EDGE);
+          return texture;
+        }
+
+        createPaperTexture() {
+          const gl = this.gl;
+          const size = 256;
+          const data = new Uint8Array(size * size * 4);
+          for (let y = 0; y < size; y += 1) {
+            for (let x = 0; x < size; x += 1) {
+              const offset = (y * size + x) * 4;
+              const grain = (hash2(x, y, 91) - 0.5) * 20;
+              const fiber = Math.sin(y * 0.73 + Math.sin(x * 0.05) * 2) * 2.2;
+              data[offset] = clamp(233 + grain + fiber, 0, 255);
+              data[offset + 1] = clamp(224 + grain + fiber, 0, 255);
+              data[offset + 2] = clamp(203 + grain * 0.8, 0, 255);
+              data[offset + 3] = 255;
+            }
+          }
+          const texture = this.createTexture(true);
+          gl.bindTexture(gl.TEXTURE_2D, texture);
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, size, size, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
+          return texture;
+        }
+
+        upload(texture, data) {
+          const gl = this.gl;
+          gl.bindTexture(gl.TEXTURE_2D, texture);
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, GRID_WIDTH, GRID_HEIGHT, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
+        }
+
+        resize(width, height) {
+          this.canvas.width = Math.max(1, Math.round(width));
+          this.canvas.height = Math.max(1, Math.round(height));
+          this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+        }
+
+        render(ecology, time, showClimate) {
+          const gl = this.gl;
+          const changed = this.lastEcology !== ecology || this.lastRevision !== ecology.revision;
+          if (changed) {
+            ecology.writeStateData();
+            ecology.writeClimateData();
+            this.upload(this.textures[0], ecology.stateData);
+            this.upload(this.textures[1], ecology.climateData);
+            this.lastEcology = ecology;
+            this.lastRevision = ecology.revision;
+          }
+          if (!this.terrainUploaded || ecology.terrainDirty) {
+            ecology.writeTerrainData();
+            this.upload(this.textures[2], ecology.terrainData);
+            this.terrainUploaded = true;
+          }
+          gl.useProgram(this.program);
+          gl.activeTexture(gl.TEXTURE0);
+          gl.bindTexture(gl.TEXTURE_2D, this.textures[0]);
+          gl.uniform1i(this.uniforms.u_state, 0);
+          gl.activeTexture(gl.TEXTURE1);
+          gl.bindTexture(gl.TEXTURE_2D, this.textures[1]);
+          gl.uniform1i(this.uniforms.u_climate, 1);
+          gl.activeTexture(gl.TEXTURE2);
+          gl.bindTexture(gl.TEXTURE_2D, this.textures[2]);
+          gl.uniform1i(this.uniforms.u_terrain, 2);
+          gl.activeTexture(gl.TEXTURE3);
+          gl.bindTexture(gl.TEXTURE_2D, this.textures[3]);
+          gl.uniform1i(this.uniforms.u_paper, 3);
+          const rect = getWorldLayout(this.canvas.width, this.canvas.height);
+          gl.uniform2f(this.uniforms.u_resolution, this.canvas.width, this.canvas.height);
+          gl.uniform4f(this.uniforms.u_worldRect, rect.x, rect.y, rect.width, rect.height);
+          gl.uniform2f(this.uniforms.u_grid, GRID_WIDTH, GRID_HEIGHT);
+          gl.uniform1f(this.uniforms.u_time, time);
+          gl.uniform1f(this.uniforms.u_season, ecology.seasonPhase);
+          gl.uniform1f(this.uniforms.u_showClimate, showClimate ? 1 : 0);
+          gl.uniform1f(this.uniforms.u_rotated, rect.rotated ? 1 : 0);
+          gl.drawArrays(gl.TRIANGLES, 0, 3);
+        }
+      }
+
+      class CanvasRenderer {
+        constructor(canvas) {
+          this.canvas = canvas;
+          this.context = canvas.getContext("2d", { alpha: false });
+          this.label = "Canvas 2D · резервная бумага";
+          this.colors = ["", "#60755b", "#b18b4e", "#a45f43", "#813d43", "#8a7b5c"];
+          this.paper = document.createElement("canvas");
+          this.paper.width = 256;
+          this.paper.height = 256;
+          const context = this.paper.getContext("2d");
+          const image = context.createImageData(256, 256);
+          for (let i = 0; i < image.data.length; i += 4) {
+            const noise = Math.random() * 18;
+            image.data[i] = 233 + noise;
+            image.data[i + 1] = 224 + noise;
+            image.data[i + 2] = 203 + noise;
+            image.data[i + 3] = 255;
+          }
+          context.putImageData(image, 0, 0);
+          this.pattern = this.context.createPattern(this.paper, "repeat");
+        }
+
+        resize(width, height) {
+          this.canvas.width = Math.max(1, Math.round(width));
+          this.canvas.height = Math.max(1, Math.round(height));
+        }
+
+        render(ecology, time, showClimate) {
+          const context = this.context;
+          const width = this.canvas.width;
+          const height = this.canvas.height;
+          context.fillStyle = this.pattern;
+          context.fillRect(0, 0, width, height);
+          const layout = getWorldLayout(width, height);
+          context.save();
+          context.beginPath();
+          context.rect(layout.x, layout.y, layout.width, layout.height);
+          context.clip();
+          if (layout.rotated) {
+            context.translate(layout.x + layout.width, layout.y);
+            context.rotate(Math.PI / 2);
+          }
+          const localWidth = layout.rotated ? layout.height : layout.width;
+          const localHeight = layout.rotated ? layout.width : layout.height;
+          const localX = layout.rotated ? 0 : layout.x;
+          const localY = layout.rotated ? 0 : layout.y;
+          const cellWidth = localWidth / GRID_WIDTH;
+          const cellHeight = localHeight / GRID_HEIGHT;
+          for (let y = 0; y < GRID_HEIGHT; y += 1) {
+            for (let x = 0; x < GRID_WIDTH; x += 1) {
+              const index = y * GRID_WIDTH + x;
+              const terrain = ecology.terrain[index];
+              if (terrain === TERRAIN.WATER) context.fillStyle = "rgba(111,139,138,0.38)";
+              else if (terrain === TERRAIN.ROCK) context.fillStyle = "rgba(110,104,88,0.35)";
+              else context.fillStyle = "rgba(151,128,84,0.08)";
+              context.fillRect(localX + x * cellWidth, localY + y * cellHeight, cellWidth + 0.4, cellHeight + 0.4);
+              const type = ecology.life[index];
+              if (type === TYPE.EMPTY) continue;
+              context.fillStyle = this.colors[type];
+              const px = localX + (x + 0.5) * cellWidth;
+              const py = localY + (y + 0.5) * cellHeight;
+              context.beginPath();
+              if (type === TYPE.PRODUCER) context.arc(px, py, cellWidth * 0.3, 0, TAU);
+              else if (type === TYPE.CONSUMER) context.ellipse(px, py, cellWidth * 0.38, cellHeight * 0.22, 0, 0, TAU);
+              else if (type === TYPE.PREDATOR) {
+                context.moveTo(px, py - cellHeight * 0.32);
+                context.lineTo(px + cellWidth * 0.32, py);
+                context.lineTo(px, py + cellHeight * 0.32);
+                context.lineTo(px - cellWidth * 0.32, py);
+                context.closePath();
+              } else if (type === TYPE.PARASITE) context.ellipse(px, py, cellWidth * 0.14, cellHeight * 0.32, 0, 0, TAU);
+              else {
+                context.arc(px - cellWidth * 0.14, py, cellWidth * 0.13, 0, TAU);
+                context.arc(px + cellWidth * 0.14, py + cellHeight * 0.08, cellWidth * 0.11, 0, TAU);
+              }
+              context.fill();
+            }
+          }
+          if (showClimate) {
+            context.fillStyle = "rgba(111,139,138,0.14)";
+            context.fillRect(localX, localY, localWidth, localHeight);
+          }
+          context.restore();
+        }
+      }
+
+      function createRenderer(canvas) {
+        if (new URLSearchParams(window.location.search).get("renderer") === "canvas") return new CanvasRenderer(canvas);
+        const probe = document.createElement("canvas");
+        const probeGl = probe.getContext("webgl2", { alpha: false, antialias: false });
+        if (probeGl) {
+          try {
+            new WebGLRenderer(probe, probeGl);
+            const lose = probeGl.getExtension("WEBGL_lose_context");
+            if (lose) lose.loseContext();
+            const gl = canvas.getContext("webgl2", { alpha: false, antialias: false, preserveDrawingBuffer: false });
+            if (gl) return new WebGLRenderer(canvas, gl);
+          } catch (error) {
+            console.warn("WebGL2 renderer unavailable:", error);
+          }
+        }
+        return new CanvasRenderer(canvas);
+      }
+
+      function initApp() {
+        const $ = (id) => document.getElementById(id);
+        const canvas = $("world");
+        const renderer = createRenderer(canvas);
+        let ecology = new Ecology(Date.now() ^ 0x51a7f00d);
+        let running = false;
+        let speed = 1;
+        let brush = "1";
+        let showClimate = false;
+        let lastFrame = performance.now();
+        let accumulator = 0;
+        let uiTimer = 0;
+        let qualityScale = 1;
+        let performanceFrames = 0;
+        let performanceTime = 0;
+        let painting = false;
+        let paintBrush = brush;
+        let lastPaint = null;
+        const speeds = [0.5, 1, 2, 4];
+        let speedIndex = 1;
+
+        $("renderer-label").textContent = renderer.label;
+
+        const geneBars = $("gene-bars");
+        for (let gene = 0; gene < GENE_COUNT; gene += 1) {
+          const row = document.createElement("div");
+          row.className = "gene-row";
+          const label = document.createElement("span");
+          label.textContent = GENE_LABELS[gene];
+          const track = document.createElement("div");
+          track.className = "gene-track";
+          const fill = document.createElement("div");
+          fill.className = "gene-fill";
+          fill.id = `gene-fill-${gene}`;
+          track.appendChild(fill);
+          const value = document.createElement("span");
+          value.className = "gene-value";
+          value.id = `gene-value-${gene}`;
+          row.append(label, track, value);
+          geneBars.appendChild(row);
+        }
+
+        function resize() {
+          const rect = canvas.getBoundingClientRect();
+          const baseDpr = Math.min(1.5, window.devicePixelRatio || 1);
+          const fitDpr = Math.sqrt(4000000 / Math.max(1, rect.width * rect.height));
+          const dpr = Math.max(0.45, Math.min(baseDpr, fitDpr)) * qualityScale;
+          renderer.resize(rect.width * dpr, rect.height * dpr);
+          painting = false;
+          lastPaint = null;
+        }
+
+        function setRunning(next) {
+          running = next;
+          $("pause-button").textContent = running ? "Пауза" : "Продолжить";
+          $("pause-button").classList.toggle("primary", running);
+        }
+
+        function selectBrush(next) {
+          brush = String(next);
+          for (const button of $("brush-tools").querySelectorAll(".brush")) {
+            button.classList.toggle("active", button.dataset.brush === brush);
+          }
+        }
+
+        function reset() {
+          ecology = new Ecology(Date.now() ^ Math.floor(Math.random() * 0xffffffff));
+          accumulator = 0;
+          ecology.log("Начата новая колония. Роды внесены заново.");
+          updateUI();
+        }
+
+        function pointFromEvent(event) {
+          const rect = canvas.getBoundingClientRect();
+          const layout = getWorldLayout(rect.width, rect.height);
+          return screenToGrid(layout, event.clientX - rect.left, event.clientY - rect.top);
+        }
+
+        function paintLine(from, to) {
+          const distance = Math.hypot(to.x - from.x, to.y - from.y);
+          const steps = Math.max(1, Math.ceil(distance / 2));
+          for (let i = 1; i <= steps; i += 1) {
+            ecology.paint(lerp(from.x, to.x, i / steps), lerp(from.y, to.y, i / steps), paintBrush, 2);
+          }
+        }
+
+        canvas.addEventListener("pointerdown", (event) => {
+          if (!$("intro").hidden || !$("help").hidden) return;
+          event.preventDefault();
+          canvas.focus({ preventScroll: true });
+          painting = true;
+          paintBrush = event.button === 2 ? "erase" : brush;
+          const point = pointFromEvent(event);
+          if (!point) { painting = false; return; }
+          ecology.paint(point.x, point.y, paintBrush, event.button === 2 ? 4 : 2);
+          lastPaint = point;
+          canvas.setPointerCapture(event.pointerId);
+        });
+        canvas.addEventListener("pointermove", (event) => {
+          if (!painting) return;
+          const point = pointFromEvent(event);
+          if (!point) return;
+          if (lastPaint) paintLine(lastPaint, point);
+          lastPaint = point;
+        });
+        const stopPainting = () => { painting = false; lastPaint = null; };
+        canvas.addEventListener("pointerup", stopPainting);
+        canvas.addEventListener("pointercancel", stopPainting);
+        canvas.addEventListener("contextmenu", (event) => event.preventDefault());
+
+        for (const button of $("brush-tools").querySelectorAll(".brush")) {
+          button.addEventListener("click", () => selectBrush(button.dataset.brush));
+        }
+
+        $("pause-button").addEventListener("click", () => setRunning(!running));
+        $("speed-button").addEventListener("click", () => {
+          speedIndex = (speedIndex + 1) % speeds.length;
+          speed = speeds[speedIndex];
+          $("speed-button").textContent = `${speed}×`;
+        });
+        $("reset-button").addEventListener("click", reset);
+        $("rain-button").addEventListener("click", () => ecology.disturb("rain"));
+        $("drought-button").addEventListener("click", () => ecology.disturb("drought"));
+        $("fertilize-button").addEventListener("click", () => ecology.disturb("fertilize"));
+        $("climate-button").addEventListener("click", () => {
+          showClimate = !showClimate;
+          $("climate-button").classList.toggle("primary", showClimate);
+        });
+        $("start-button").addEventListener("click", () => {
+          $("intro").hidden = true;
+          setRunning(true);
+          canvas.focus({ preventScroll: true });
+        });
+        $("help-button").addEventListener("click", () => { $("help").hidden = false; });
+        $("intro-help").addEventListener("click", () => { $("help").hidden = false; });
+        $("close-help").addEventListener("click", () => { $("help").hidden = true; canvas.focus({ preventScroll: true }); });
+        $("help").addEventListener("click", (event) => { if (event.target === $("help")) $("help").hidden = true; });
+
+        window.addEventListener("keydown", (event) => {
+          if (event.target && event.target.closest && event.target.closest("button") && (event.key === "Enter" || event.key === " ")) return;
+          const isSpace = event.code === "Space" || event.key === " " || event.key === "Spacebar";
+          if (isSpace) {
+            event.preventDefault();
+            if (!$("intro").hidden) $("start-button").click();
+            else setRunning(!running);
+          } else if (event.key === "+" || event.key === "=") {
+            speedIndex = Math.min(speeds.length - 1, speedIndex + 1);
+            speed = speeds[speedIndex];
+            $("speed-button").textContent = `${speed}×`;
+          } else if (event.key === "-") {
+            speedIndex = Math.max(0, speedIndex - 1);
+            speed = speeds[speedIndex];
+            $("speed-button").textContent = `${speed}×`;
+          } else if (event.key.toLowerCase() === "r") {
+            reset();
+          } else if (event.key.toLowerCase() === "c") {
+            $("climate-button").click();
+          } else if (event.key.toLowerCase() === "h" || event.key === "Escape") {
+            $("help").hidden = !$("help").hidden;
+          } else if (/^[1-9]$/.test(event.key)) {
+            const buttons = $("brush-tools").querySelectorAll(".brush");
+            const button = buttons[Number(event.key) - 1];
+            if (button) selectBrush(button.dataset.brush);
+          }
+        });
+        window.addEventListener("resize", resize);
+        window.addEventListener("blur", () => { if (running) setRunning(false); });
+        document.addEventListener("visibilitychange", () => { if (document.hidden && running) setRunning(false); });
+        canvas.addEventListener("webglcontextlost", (event) => {
+          event.preventDefault();
+          $("renderer-label").textContent = "WebGL2-контекст потерян. Перезагрузи страницу.";
+          setRunning(false);
+        });
+
+        function setText(id, value) {
+          const element = $(id);
+          if (element.textContent !== value) element.textContent = value;
+        }
+
+        function updateUI() {
+          const stats = ecology.stats;
+          const season = SEASONS[ecology.seasonIndex];
+          setText("epoch", `Эпоха ${ecology.year}`);
+          setText("season-name", season.name);
+          setText("season-large", season.name);
+          setText("season-note", season.note);
+          $("epoch-fill").style.width = `${ecology.seasonPhase * 100}%`;
+          $("wheel-marker").style.transform = `rotate(${ecology.seasonPhase * 360}deg)`;
+          setText("count-producer", String(stats.populations[TYPE.PRODUCER]));
+          setText("count-consumer", String(stats.populations[TYPE.CONSUMER]));
+          setText("count-predator", String(stats.populations[TYPE.PREDATOR]));
+          setText("count-parasite", String(stats.populations[TYPE.PARASITE]));
+          setText("count-decomposer", String(stats.populations[TYPE.DECOMPOSER]));
+          setText("mutations", String(stats.mutations));
+          setText("diversity", `${stats.diversity.toFixed(2).replace(".", ",")} · ${stats.lineages}`);
+          const climate = [
+            ["temp", stats.meanTemperature],
+            ["moisture", stats.meanMoisture],
+            ["nutrient", stats.meanNutrients]
+          ];
+          for (const [name, value] of climate) {
+            $(`${name}-fill`).style.width = `${clamp(value, 0, 1) * 100}%`;
+            setText(`${name}-value`, `${Math.round(value * 100)}%`);
+          }
+          const producerTraits = stats.traits[TYPE.PRODUCER];
+          for (let gene = 0; gene < GENE_COUNT; gene += 1) {
+            const value = producerTraits[gene];
+            const normalized = clamp((value - GENE_MIN[gene]) / (GENE_MAX[gene] - GENE_MIN[gene]), 0, 1);
+            $(`gene-fill-${gene}`).style.width = `${normalized * 100}%`;
+            setText(`gene-value-${gene}`, value.toFixed(2).replace(".", ","));
+          }
+          const log = $("event-log");
+          log.replaceChildren();
+          for (const entry of ecology.events.slice(0, 5)) {
+            const row = document.createElement("div");
+            row.className = "log-entry";
+            const time = document.createElement("time");
+            time.textContent = `Э${entry.year}`;
+            const message = document.createElement("span");
+            message.textContent = entry.message;
+            row.append(time, message);
+            log.appendChild(row);
+          }
+          drawChart();
+        }
+
+        function drawChart() {
+          const chart = $("population-canvas");
+          const rect = chart.getBoundingClientRect();
+          const dpr = Math.min(2, window.devicePixelRatio || 1);
+          const width = Math.max(1, Math.round(rect.width * dpr));
+          const height = Math.max(1, Math.round(rect.height * dpr));
+          if (chart.width !== width || chart.height !== height) {
+            chart.width = width;
+            chart.height = height;
+          }
+          const context = chart.getContext("2d");
+          context.setTransform(dpr, 0, 0, dpr, 0, 0);
+          context.clearRect(0, 0, rect.width, rect.height);
+          const left = 22;
+          const right = rect.width - 6;
+          const top = 5;
+          const bottom = rect.height - 13;
+          context.strokeStyle = "rgba(38,51,45,0.12)";
+          context.lineWidth = 1;
+          for (let i = 0; i <= 3; i += 1) {
+            const y = top + (bottom - top) * i / 3;
+            context.beginPath();
+            context.moveTo(left, y);
+            context.lineTo(right, y);
+            context.stroke();
+          }
+          if (ecology.history.length < 2) return;
+          const max = Math.max(20, ...ecology.history.flatMap((point) => point.populations));
+          const colors = ["", "#60755b", "#b18b4e", "#a45f43", "#813d43", "#8a7b5c"];
+          for (let type = 1; type <= 4; type += 1) {
+            context.strokeStyle = colors[type];
+            context.lineWidth = 1.4;
+            context.beginPath();
+            ecology.history.forEach((point, index) => {
+              const x = left + (right - left) * index / Math.max(1, ecology.history.length - 1);
+              const y = bottom - (bottom - top) * point.populations[type] / max;
+              if (index === 0) context.moveTo(x, y);
+              else context.lineTo(x, y);
+            });
+            context.stroke();
+          }
+          context.fillStyle = "rgba(38,51,45,0.48)";
+          context.font = "8px Aptos, sans-serif";
+          context.fillText(String(max), 0, top + 3);
+          context.fillText("0", 8, bottom + 2);
+        }
+
+        function frame(now) {
+          const rawElapsed = Math.max(0, (now - lastFrame) / 1000);
+          const elapsed = Math.min(0.1, rawElapsed);
+          lastFrame = now;
+          performanceFrames += 1;
+          performanceTime += rawElapsed;
+          if (performanceFrames >= 90) {
+            const average = performanceTime / performanceFrames;
+            if (average > 1 / 50 && qualityScale > 0.5) {
+              qualityScale = Math.max(0.5, qualityScale * 0.85);
+              resize();
+            } else if (average < 1 / 58 && qualityScale < 1) {
+              qualityScale = Math.min(1, qualityScale * 1.08);
+              resize();
+            }
+            performanceFrames = 0;
+            performanceTime = 0;
+          }
+          if (running) {
+            accumulator += elapsed * speed;
+            let steps = 0;
+            while (accumulator >= STEP_SECONDS && steps < 24) {
+              ecology.step();
+              accumulator -= STEP_SECONDS;
+              steps += 1;
+            }
+          }
+          uiTimer += elapsed;
+          if (uiTimer >= 0.2) {
+            uiTimer = 0;
+            updateUI();
+          }
+          renderer.render(ecology, now / 1000, showClimate);
+          requestAnimationFrame(frame);
+        }
+
+        resize();
+        updateUI();
+        requestAnimationFrame(frame);
+        window.LivingCodexApp = Object.freeze({
+          getEcology: () => ecology,
+          getRenderer: () => renderer.label,
+          getQuality: () => ({ scale: qualityScale, width: canvas.width, height: canvas.height }),
+          setRunning,
+          reset,
+          setBrush: selectBrush,
+          disturb: (kind) => ecology.disturb(kind)
+        });
+      }
+
+      globalThis.LivingCodex = Object.freeze({
+        version: "1.0.0",
+        Ecology,
+        TYPE,
+        TERRAIN,
+        SEASONS,
+        GRID_WIDTH,
+        GRID_HEIGHT,
+        STEP_SECONDS,
+        YEAR_SECONDS,
+        getWorldLayout,
+        screenToGrid
+      });
+
+      if (typeof document !== "undefined" && document.getElementById("world")) initApp();
+    })();
+  </script>
+</body>
+</html>
