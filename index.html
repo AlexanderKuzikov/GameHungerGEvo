@@ -404,6 +404,23 @@
     .intro-actions .button { min-height: 44px; padding: 0 20px; }
     .intro-foot { margin-top: 24px; color: var(--muted); font-size: 10px; }
 
+    .mobile-only { display: none; }
+    .mobile-panel {
+      position: absolute;
+      z-index: 14;
+      top: 84px;
+      right: 12px;
+      width: min(300px, calc(100% - 24px));
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--paper-light);
+      box-shadow: var(--shadow);
+    }
+    .mobile-panel h2 { margin: 0 0 10px; font-family: Georgia, serif; font-size: 17px; font-weight: 400; }
+    .mobile-panel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+    .mobile-panel-grid button { min-height: 38px; border: 1px solid var(--line); border-radius: 4px; color: var(--ink); background: rgba(255,255,255,.28); }
+
     .help {
       position: absolute;
       inset: 0;
@@ -438,6 +455,8 @@
     @media (max-width: 820px) {
       .topbar { grid-template-columns: 1fr auto; left: 12px; right: 12px; top: 12px; }
       .epoch { display: none; }
+      .top-actions .mobile-only { display: inline-flex; align-items: center; }
+      .top-actions .button:not(.primary):not(.mobile-only) { display: none; }
       .sidebar.left { left: 12px; top: 84px; bottom: auto; width: 172px; max-height: calc(100dvh - 180px); }
       .sidebar.right { display: none; }
       .bottom-panel { left: 12px; right: 12px; bottom: 12px; height: 112px; }
@@ -448,7 +467,8 @@
     }
 
     @media (max-width: 520px) {
-      .top-actions .button:not(.primary) { display: none; }
+      .top-actions .mobile-only { display: inline-flex; align-items: center; }
+      .top-actions .button:not(.primary):not(.mobile-only) { display: none; }
       .sidebar.left { width: 148px; padding: 9px; }
       .section-title { font-size: 9px; }
       .brush { grid-template-columns: 24px 1fr; padding: 5px 6px; }
@@ -543,6 +563,7 @@
         <div class="epoch-track"><div id="epoch-fill" class="epoch-fill"></div></div>
       </div>
       <div class="top-actions">
+        <button id="mobile-tools" class="button mobile-only" type="button">Ещё</button>
         <button id="help-button" class="button" type="button">Как наблюдать</button>
         <button id="speed-button" class="button" type="button" title="Скорость (+)">1×</button>
         <button id="pause-button" class="button primary" type="button" title="Пауза (Space)">Пауза</button>
@@ -636,6 +657,19 @@
           <button id="intro-help" class="button" type="button">Правила наблюдения</button>
         </div>
         <div class="intro-foot">Рисуй кистью · Space — пауза · 1–9 — виды · C — климат · R — новая колония</div>
+      </div>
+    </section>
+
+    <section id="mobile-panel" class="mobile-panel" hidden aria-label="Дополнительные действия">
+      <h2>Действия исследователя</h2>
+      <div class="mobile-panel-grid">
+        <button type="button" data-mobile-action="reset">Новая колония</button>
+        <button type="button" data-mobile-action="speed">Скорость</button>
+        <button type="button" data-mobile-action="help">Помощь</button>
+        <button type="button" data-mobile-action="climate">Климат</button>
+        <button type="button" data-mobile-action="rain">Дождь</button>
+        <button type="button" data-mobile-action="drought">Засуха</button>
+        <button type="button" data-mobile-action="fertilize">Удобрение</button>
       </div>
     </section>
 
@@ -774,6 +808,10 @@
           this.nextSpores = new Float32Array(CELL_COUNT);
           this.sporeType = new Uint8Array(CELL_COUNT);
           this.nextSporeType = new Uint8Array(CELL_COUNT);
+          this.sporeGenes = new Float32Array(CELL_COUNT * GENE_COUNT);
+          this.nextSporeGenes = new Float32Array(CELL_COUNT * GENE_COUNT);
+          this.sporeLineage = new Uint32Array(CELL_COUNT);
+          this.nextSporeLineage = new Uint32Array(CELL_COUNT);
 
           this.stateData = new Uint8Array(CELL_COUNT * 4);
           this.climateData = new Uint8Array(CELL_COUNT * 4);
@@ -782,6 +820,10 @@
           this.claimed = new Int32Array(CELL_COUNT);
           this.claimPriority = new Float32Array(CELL_COUNT);
           this.eaten = new Uint8Array(CELL_COUNT);
+          this.died = new Uint8Array(CELL_COUNT);
+          this.movedFrom = new Int32Array(CELL_COUNT);
+          this.movedTo = new Int32Array(CELL_COUNT);
+          this.infectionDelta = new Float32Array(CELL_COUNT);
           this.counts = new Uint8Array(6);
           this.geneSumsScratch = new Float64Array(GENE_COUNT);
           this.mutationRate = 0.045;
@@ -840,12 +882,21 @@
           this.nextLineage.fill(0);
           this.infection.fill(0);
           this.nextInfection.fill(0);
+          this.eaten.fill(0);
+          this.died.fill(0);
+          this.movedFrom.fill(-1);
+          this.movedTo.fill(-1);
+          this.infectionDelta.fill(0);
           this.detritus.fill(0);
           this.nextDetritus.fill(0);
           this.spores.fill(0);
           this.nextSpores.fill(0);
           this.sporeType.fill(0);
           this.nextSporeType.fill(0);
+          this.sporeGenes.fill(0);
+          this.nextSporeGenes.fill(0);
+          this.sporeLineage.fill(0);
+          this.nextSporeLineage.fill(0);
 
           for (let y = 0; y < this.height; y += 1) {
             for (let x = 0; x < this.width; x += 1) {
@@ -1002,10 +1053,14 @@
           return true;
         }
 
-        claim(index, type, energy, age, cooldown, infection, lineage, priority) {
+        claim(index, type, energy, age, cooldown, infection, lineage, priority, sourceGeneOffset = -1) {
           if (index < 0 || this.terrain[index] !== TERRAIN.SOIL) return false;
           const owner = this.claimed[index];
           if (owner !== -1 && this.claimPriority[index] >= priority) return false;
+          if (sourceGeneOffset >= 0) {
+            const targetOffset = index * GENE_COUNT;
+            for (let gene = 0; gene < GENE_COUNT; gene += 1) this.nextGenes[targetOffset + gene] = this.genes[sourceGeneOffset + gene];
+          }
           this.claimed[index] = index;
           this.claimPriority[index] = priority;
           this.nextLife[index] = type;
@@ -1043,7 +1098,7 @@
           let bestScore = -Infinity;
           for (let slot = 0; slot < 8; slot += 1) {
             const neighbor = this.neighbors[index * 8 + slot];
-            if (neighbor < 0 || this.eaten[neighbor]) continue;
+            if (neighbor < 0 || this.eaten[neighbor] || this.died[neighbor] || this.movedTo[neighbor] >= 0) continue;
             const type = this.life[neighbor];
             if (type !== typeA && type !== typeB) continue;
             const defense = this.genes[neighbor * GENE_COUNT + 4];
@@ -1124,8 +1179,11 @@
               if (neighbor >= 0 && this.terrain[neighbor] === TERRAIN.WATER) waterNeighbors += 1;
             }
             const evaporation = 0.0012 + this.globalLight * 0.0018 + (terrain === TERRAIN.ROCK ? 0.003 : 0);
-            this.nextMoisture[i] = clamp(this.moisture[i] * 0.998 + this.globalRain * 0.0075 - evaporation + waterNeighbors * 0.002, 0, 1);
-            this.nextNutrients[i] = this.nutrients[i] * 0.9985;
+            const drainage = terrain === TERRAIN.SOIL && this.moisture[i] > 0.85 ? (this.moisture[i] - 0.85) * 0.02 : 0;
+            this.nextMoisture[i] = clamp(this.moisture[i] * 0.998 + this.globalRain * 0.0075 - evaporation - drainage + waterNeighbors * 0.002, 0, 1);
+            const weathering = terrain === TERRAIN.SOIL ? 0.00012 * (1 - this.nutrients[i]) : 0;
+            const detritusRelease = this.detritus[i] * 0.0008;
+            this.nextNutrients[i] = clamp(this.nutrients[i] * 0.9985 + weathering + detritusRelease, 0, 1.2);
             this.nextDetritus[i] = this.detritus[i] * 0.992;
             this.nextSpores[i] = this.spores[i] * 0.9994;
             this.nextSporeType[i] = this.sporeType[i];
@@ -1145,9 +1203,15 @@
           this.nextCooldown.fill(0);
           this.nextLineage.fill(0);
           this.nextInfection.fill(0);
+          this.nextSporeGenes.set(this.sporeGenes);
+          this.nextSporeLineage.set(this.sporeLineage);
           this.claimed.fill(-1);
           this.claimPriority.fill(0);
           this.eaten.fill(0);
+          this.died.fill(0);
+          this.movedFrom.fill(-1);
+          this.movedTo.fill(-1);
+          this.infectionDelta.fill(0);
 
           const stride = 7919;
           this.orderOffset = (this.orderOffset + stride) % CELL_COUNT;
@@ -1166,10 +1230,9 @@
                 }
               } else if (this.sporeType[index] === TYPE.PRODUCER && this.spores[index] > 0.12 && this.moisture[index] > 0.22 && this.nutrients[index] > 0.1 && this.rng() < 0.012 * this.spores[index] * this.moisture[index] * this.nutrients[index]) {
                 const offset = index * GENE_COUNT;
-                const genome = this.randomGenome(TYPE.PRODUCER);
-                for (let gene = 0; gene < GENE_COUNT; gene += 1) this.nextGenes[offset + gene] = genome[gene];
+                for (let gene = 0; gene < GENE_COUNT; gene += 1) this.nextGenes[offset + gene] = this.sporeGenes[offset + gene];
                 this.mutateGenes(offset, offset, this.nextGenes, this.nextGenes);
-                this.nextLineage[index] = this.nextLineageId++;
+                this.nextLineage[index] = this.sporeLineage[index] || this.nextLineageId++;
                 this.nextSpores[index] *= 0.25;
                 this.claim(index, TYPE.PRODUCER, 0.58, 0, 8, 0, this.nextLineage[index], 0.45);
                 for (let slot = 0; slot < 8; slot += 1) {
@@ -1181,10 +1244,9 @@
                 }
               } else if (this.sporeType[index] === TYPE.PARASITE && this.spores[index] > 0.15 && this.rng() < 0.004 * this.spores[index]) {
                 const offset = index * GENE_COUNT;
-                const genome = this.randomGenome(TYPE.PARASITE);
-                for (let gene = 0; gene < GENE_COUNT; gene += 1) this.nextGenes[offset + gene] = genome[gene];
+                for (let gene = 0; gene < GENE_COUNT; gene += 1) this.nextGenes[offset + gene] = this.sporeGenes[offset + gene];
                 this.mutateGenes(offset, offset, this.nextGenes, this.nextGenes);
-                this.nextLineage[index] = this.nextLineageId++;
+                this.nextLineage[index] = this.sporeLineage[index] || this.nextLineageId++;
                 this.nextSpores[index] *= 0.3;
                 this.claim(index, TYPE.PARASITE, 0.62, 0, 8, 0, this.nextLineage[index], 0.42);
               } else if (counts[TYPE.DECOMPOSER] === 3 && this.detritus[index] > 0.08) {
@@ -1217,8 +1279,8 @@
               const lightFactor = this.globalLight * (0.45 + moisture * 0.75);
               const soilFactor = 0.35 + nutrients * 0.9;
               const climateFactor = clamp(1 - temperatureStress * 1.45, 0.08, 1);
-              energy += 0.021 * lightFactor * soilFactor * climateFactor + 0.0025 - metabolism * 0.0045;
-              this.nextNutrients[index] = Math.max(0, this.nextNutrients[index] - 0.0014 * metabolism);
+              energy += 0.021 * lightFactor * soilFactor * climateFactor + 0.0045 - metabolism * 0.0045;
+              this.nextNutrients[index] = Math.max(0, this.nextNutrients[index] - 0.0009 * metabolism);
             } else if (type === TYPE.CONSUMER) {
               const food = this.rng() < 0.38 ? this.chooseFood(index, TYPE.PRODUCER) : -1;
               if (food >= 0) {
@@ -1241,20 +1303,17 @@
               let hosts = 0;
               for (let slot = 0; slot < 8; slot += 1) {
                 const neighbor = this.neighbors[index * 8 + slot];
-                if (neighbor < 0 || this.life[neighbor] < TYPE.PRODUCER || this.life[neighbor] > TYPE.PREDATOR) continue;
+                if (neighbor < 0 || this.life[neighbor] < TYPE.PRODUCER || this.life[neighbor] > TYPE.PREDATOR || this.eaten[neighbor] || this.died[neighbor]) continue;
+                const hostTarget = this.movedTo[neighbor] >= 0 ? this.movedTo[neighbor] : neighbor;
                 const hostDefense = this.genes[neighbor * GENE_COUNT + 4];
                 const pressure = 0.024 * fertility * (1 - hostDefense * 0.55);
-                this.nextInfection[neighbor] = clamp(this.nextInfection[neighbor] + pressure, 0, 1.6);
+                this.infectionDelta[hostTarget] += pressure;
                 energy += pressure * 0.4;
                 hosts += 1;
               }
               energy -= metabolism * 0.0065 + (hosts === 0 ? 0.006 : 0);
             } else if (type === TYPE.DECOMPOSER) {
-              let available = this.detritus[index];
-              for (let slot = 0; slot < 8; slot += 1) {
-                const neighbor = this.neighbors[index * 8 + slot];
-                if (neighbor >= 0) available += this.detritus[neighbor] * 0.25;
-              }
+              const available = this.detritus[index];
               const consumed = Math.min(available, metabolism * 0.022);
               this.nextDetritus[index] = Math.max(0, this.nextDetritus[index] - consumed);
               this.nextNutrients[index] = clamp(this.nextNutrients[index] + consumed * 0.38, 0, 1.2);
@@ -1279,10 +1338,15 @@
 
             const maxAge = 260 + fertility * 120;
             if (!survives || energy <= 0 || infection > 1.45 || age > maxAge) {
+              this.died[index] = 1;
               this.nextDetritus[index] = clamp(this.nextDetritus[index] + 0.12 + Math.max(0, energy) * 0.18, 0, 1.5);
               if (type === TYPE.PRODUCER || type === TYPE.PARASITE) {
                 this.nextSpores[index] = clamp(this.nextSpores[index] + 0.32 + Math.max(0, energy) * 0.08, 0, 1.5);
                 this.nextSporeType[index] = type;
+                const sourceOffset = index * GENE_COUNT;
+                const targetOffset = index * GENE_COUNT;
+                for (let gene = 0; gene < GENE_COUNT; gene += 1) this.nextSporeGenes[targetOffset + gene] = this.genes[sourceOffset + gene];
+                this.nextSporeLineage[index] = this.lineage[index];
               }
               continue;
             }
@@ -1313,16 +1377,28 @@
             }
 
             const priority = energy + age * 0.0005;
-            if (!this.claim(targetIndex, type, energy, age, reproduced ? 10 : cooldown, infection, this.lineage[index], priority) && targetIndex !== index) {
-              this.claim(index, type, energy, age, cooldown, infection, this.lineage[index], priority);
+            let placed = false;
+            if (targetIndex !== index) placed = this.claim(targetIndex, type, energy, age, reproduced ? 10 : cooldown, infection, this.lineage[index], priority, offset);
+            else placed = this.claim(index, type, energy, age, reproduced ? 10 : cooldown, infection, this.lineage[index], priority, offset);
+            if (!placed && targetIndex !== index) placed = this.claim(index, type, energy, age, cooldown, infection, this.lineage[index], priority, offset);
+            if (placed && targetIndex !== index) {
+              this.movedFrom[targetIndex] = index;
+              this.movedTo[index] = targetIndex;
             }
+          }
+
+          for (let i = 0; i < CELL_COUNT; i += 1) {
+            if (this.infectionDelta[i] <= 0) continue;
+            const target = this.movedTo[i] >= 0 ? this.movedTo[i] : i;
+            if (this.nextLife[target] === TYPE.EMPTY || this.eaten[target]) continue;
+            this.nextInfection[target] = clamp(this.nextInfection[target] + this.infectionDelta[i], 0, 1.6);
           }
 
           this.swapBuffers();
           if (this.tick % 12 === 0) {
             this.updateStats();
             this.recordHistory();
-            if (this.tick % 60 === 0) this.maybeImmigrate();
+            if (this.tick % 24 === 0) this.maybeImmigrate();
           }
           this.revision += 1;
           return this.stats;
@@ -1330,17 +1406,25 @@
 
         maybeImmigrate() {
           const populations = this.stats.populations;
-          if (populations[TYPE.CONSUMER] < 25 && populations[TYPE.PRODUCER] > 250) {
-            this.seedNear(TYPE.CONSUMER, TYPE.PRODUCER, 5);
+          if (populations[TYPE.PRODUCER] < 12) {
+            this.seedCluster(TYPE.PRODUCER, 2, 2, 4);
+            this.log("Ветер принёс семена с соседней страницы. Продуценты вернулись.");
+          }
+          if (populations[TYPE.CONSUMER] < 12 && populations[TYPE.PRODUCER] > 15) {
+            this.seedNear(TYPE.CONSUMER, TYPE.PRODUCER, 4);
             this.log("С края листа занесены консументы. Пищевая цепь восстановилась.");
           }
-          if (populations[TYPE.PREDATOR] < 3 && populations[TYPE.CONSUMER] > 35) {
-            this.seedNear(TYPE.PREDATOR, TYPE.CONSUMER, 5);
+          if (populations[TYPE.PREDATOR] < 2 && populations[TYPE.CONSUMER] > 6) {
+            this.seedNear(TYPE.PREDATOR, TYPE.CONSUMER, 3);
             this.log("Хищник пересек край листа. Появился новый контроль популяции.");
           }
-          if (populations[TYPE.PARASITE] < 2 && this.stats.total > 250) {
+          if (populations[TYPE.PARASITE] < 1 && this.stats.total > 25) {
             this.seedNear(TYPE.PARASITE, TYPE.PRODUCER, 3);
             this.log("Ветер принёс споры паразита из соседнего кодекса.");
+          }
+          if (populations[TYPE.DECOMPOSER] < 2 && this.stats.total > 100) {
+            this.seedNear(TYPE.DECOMPOSER, TYPE.PRODUCER, 4);
+            this.log("На страницу осели споры редуцентов. Разложение возобновилось.");
           }
           this.updateStats();
         }
@@ -1359,6 +1443,8 @@
           [this.detritus, this.nextDetritus] = [this.nextDetritus, this.detritus];
           [this.spores, this.nextSpores] = [this.nextSpores, this.spores];
           [this.sporeType, this.nextSporeType] = [this.nextSporeType, this.sporeType];
+          [this.sporeGenes, this.nextSporeGenes] = [this.nextSporeGenes, this.sporeGenes];
+          [this.sporeLineage, this.nextSporeLineage] = [this.nextSporeLineage, this.sporeLineage];
         }
 
         updateStats() {
@@ -1553,12 +1639,25 @@
         };
       }
 
+      function gridToScreen(layout, gridX, gridY) {
+        if (layout.rotated) {
+          return {
+            x: layout.x + (gridY / GRID_HEIGHT) * layout.width,
+            y: layout.y + (1 - gridX / GRID_WIDTH) * layout.height
+          };
+        }
+        return {
+          x: layout.x + (gridX / GRID_WIDTH) * layout.width,
+          y: layout.y + (gridY / GRID_HEIGHT) * layout.height
+        };
+      }
+
       function screenToGrid(layout, localX, localY) {
         if (localX < layout.x || localX > layout.x + layout.width || localY < layout.y || localY > layout.y + layout.height) return null;
         const nx = (localX - layout.x) / layout.width;
         const ny = (localY - layout.y) / layout.height;
-        if (layout.rotated) return { x: (1 - ny) * (GRID_WIDTH - 1), y: nx * (GRID_HEIGHT - 1) };
-        return { x: nx * (GRID_WIDTH - 1), y: ny * (GRID_HEIGHT - 1) };
+        if (layout.rotated) return { x: clamp((1 - ny) * GRID_WIDTH, 0, GRID_WIDTH - 1), y: clamp(nx * GRID_HEIGHT, 0, GRID_HEIGHT - 1) };
+        return { x: clamp(nx * GRID_WIDTH, 0, GRID_WIDTH - 1), y: clamp(ny * GRID_HEIGHT, 0, GRID_HEIGHT - 1) };
       }
 
       const VERTEX_SHADER = `#version 300 es
@@ -1611,7 +1710,7 @@
         float ellipse(vec2 p, vec2 r) { return length(p / r) - 1.0; }
 
         void main() {
-          vec2 screen = v_uv * u_resolution;
+          vec2 screen = vec2(v_uv.x, 1.0 - v_uv.y) * u_resolution;
           vec2 world = (screen - u_worldRect.xy) / u_worldRect.zw;
           float inside = step(0.0, world.x) * step(0.0, world.y) * step(world.x, 1.0) * step(world.y, 1.0);
           vec2 uv = clamp(world, 0.0, 1.0);
@@ -1639,29 +1738,29 @@
           float accent = 0.0;
 
           if (terrainType > 1.5) {
-            float wash = noise(cell * 0.045);
+            float wash = noise(uv * 70.0);
             paper = mix(paper, vec3(0.56,0.66,0.65) + wash * 0.08, 0.48 * inside);
           } else if (terrainType > 0.5) {
-            float stone = noise(cell * 0.8);
+            float stone = noise(uv * 110.0);
             paper = mix(paper, vec3(0.55,0.53,0.46) + stone * 0.12, 0.42 * inside);
           } else {
-            float soil = noise(cell * 0.06);
+            float soil = noise(uv * 85.0);
             paper = mix(paper, vec3(0.78,0.71,0.56) + soil * 0.08, 0.16 * inside);
           }
 
           if (type > 0.5 && type < 1.5) {
             shape = ellipse(local, vec2(0.26 + wobble, 0.23 + wobble));
-            accent = smoothstep(0.12, -0.08, length(local - vec2(0.12, -0.08)));
-          } else if (type < 2.5) {
+            accent = 1.0 - smoothstep(-0.08, 0.12, length(local - vec2(0.12, -0.08)));
+          } else if (type > 1.5 && type < 2.5) {
             shape = ellipse(local, vec2(0.34 + wobble, 0.19 + wobble));
-            accent = smoothstep(0.08, -0.05, length(local - vec2(-0.16, 0.02)));
-          } else if (type < 3.5) {
+            accent = 1.0 - smoothstep(-0.05, 0.08, length(local - vec2(-0.16, 0.02)));
+          } else if (type > 2.5 && type < 3.5) {
             shape = abs(local.x) * 0.85 + abs(local.y) - 0.27 - wobble;
-            accent = smoothstep(0.12, -0.04, length(local));
-          } else if (type < 4.5) {
+            accent = 1.0 - smoothstep(-0.04, 0.12, length(local));
+          } else if (type > 3.5 && type < 4.5) {
             shape = ellipse(local, vec2(0.12, 0.28 + wobble));
-            accent = smoothstep(0.08, -0.05, length(local - vec2(0.1, -0.08)));
-          } else if (type < 5.5) {
+            accent = 1.0 - smoothstep(-0.05, 0.08, length(local - vec2(0.1, -0.08)));
+          } else if (type > 4.5 && type < 5.5) {
             float a = ellipse(local - vec2(-0.12, 0.03), vec2(0.12, 0.1));
             float b = ellipse(local - vec2(0.1, -0.07), vec2(0.1, 0.12));
             float c = ellipse(local - vec2(0.03, 0.15), vec2(0.08, 0.08));
@@ -1690,8 +1789,8 @@
             paper = mix(paper, climateInk, inside * 0.22);
           }
 
-          float ledger = step(0.985, fract(gridPos.x)) + step(0.985, fract(gridPos.y));
-          paper = mix(paper, vec3(0.32,0.35,0.29), ledger * inside * 0.045);
+          float ledger = step(0.997, fract(gridPos.x)) + step(0.997, fract(gridPos.y));
+          paper = mix(paper, vec3(0.32,0.35,0.29), ledger * inside * 0.012);
           float edgeShade = smoothstep(0.0, 0.08, min(min(world.x, 1.0-world.x), min(world.y, 1.0-world.y)));
           paper *= mix(0.91, 1.0, edgeShade * inside + (1.0-inside));
           outColor = vec4(paper, 1.0);
@@ -1787,7 +1886,8 @@
 
         render(ecology, time, showClimate) {
           const gl = this.gl;
-          const changed = this.lastEcology !== ecology || this.lastRevision !== ecology.revision;
+          const ecologyChanged = this.lastEcology !== ecology;
+          const changed = ecologyChanged || this.lastRevision !== ecology.revision;
           if (changed) {
             ecology.writeStateData();
             ecology.writeClimateData();
@@ -1796,7 +1896,7 @@
             this.lastEcology = ecology;
             this.lastRevision = ecology.revision;
           }
-          if (!this.terrainUploaded || ecology.terrainDirty) {
+          if (!this.terrainUploaded || ecology.terrainDirty || ecologyChanged) {
             ecology.writeTerrainData();
             this.upload(this.textures[2], ecology.terrainData);
             this.terrainUploaded = true;
@@ -1865,8 +1965,8 @@
           context.rect(layout.x, layout.y, layout.width, layout.height);
           context.clip();
           if (layout.rotated) {
-            context.translate(layout.x + layout.width, layout.y);
-            context.rotate(Math.PI / 2);
+            context.translate(layout.x, layout.y + layout.height);
+            context.rotate(-Math.PI / 2);
           }
           const localWidth = layout.rotated ? layout.height : layout.width;
           const localHeight = layout.rotated ? layout.width : layout.height;
@@ -2058,6 +2158,24 @@
           showClimate = !showClimate;
           $("climate-button").classList.toggle("primary", showClimate);
         });
+        $("mobile-tools").addEventListener("click", () => {
+          $("mobile-panel").hidden = !$("mobile-panel").hidden;
+        });
+        const mobileActions = {
+          reset: () => $("reset-button").click(),
+          speed: () => $("speed-button").click(),
+          help: () => { $("help").hidden = false; $("mobile-panel").hidden = true; },
+          climate: () => $("climate-button").click(),
+          rain: () => $("rain-button").click(),
+          drought: () => $("drought-button").click(),
+          fertilize: () => $("fertilize-button").click()
+        };
+        for (const button of $("mobile-panel").querySelectorAll("[data-mobile-action]")) {
+          button.addEventListener("click", () => {
+            mobileActions[button.dataset.mobileAction]();
+            if (button.dataset.mobileAction !== "help") $("mobile-panel").hidden = true;
+          });
+        }
         $("start-button").addEventListener("click", () => {
           $("intro").hidden = true;
           setRunning(true);
@@ -2256,6 +2374,7 @@
       globalThis.LivingCodex = Object.freeze({
         version: "1.0.0",
         Ecology,
+        CanvasRenderer,
         TYPE,
         TERRAIN,
         SEASONS,
@@ -2264,6 +2383,7 @@
         STEP_SECONDS,
         YEAR_SECONDS,
         getWorldLayout,
+        gridToScreen,
         screenToGrid
       });
 
